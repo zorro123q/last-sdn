@@ -116,6 +116,85 @@ export function exportMlReportExcel() {
   return downloadFile("/api/export/ml_report.xlsx");
 }
 
+/* ===== 第五期情感分析与语义聚类 API ===== */
+
+/**
+ * 获取情感分析总体概览
+ */
+export function getSentimentSummary() {
+  return request("/api/sentiment/summary");
+}
+
+/**
+ * 获取每日情感统计数据
+ */
+export function getSentimentDaily() {
+  return request("/api/sentiment/daily");
+}
+
+/**
+ * 获取情感分析 Top 数据
+ * @param {number} limit - 返回条数限制，默认 20
+ * @param {string|null} label - 可选，按情感标签过滤
+ */
+export function getSentimentTop(limit = 20, label = null) {
+  let path = `/api/sentiment/top?limit=${encodeURIComponent(limit)}`;
+  if (label) {
+    path += `&label=${encodeURIComponent(label)}`;
+  }
+  return request(path);
+}
+
+/**
+ * 根据关键词搜索情感分析结果
+ * @param {string} keyword - 搜索关键词
+ */
+export function searchSentiment(keyword) {
+  return request(`/api/sentiment/search?keyword=${encodeURIComponent(keyword)}`);
+}
+
+/**
+ * 手动触发情感分析任务
+ */
+export function runSentimentJob() {
+  return request("/api/sentiment/run", { method: "POST" });
+}
+
+/**
+ * 获取语义聚类结果
+ */
+export function getSemanticClusters() {
+  return request("/api/semantic/clusters");
+}
+
+/**
+ * 获取语义聚类主题分布统计
+ */
+export function getSemanticClusterSummary() {
+  return request("/api/semantic/clusters/summary");
+}
+
+/**
+ * 手动触发语义聚类任务
+ */
+export function runSemanticClusterJob() {
+  return request("/api/semantic/run", { method: "POST" });
+}
+
+/**
+ * 导出增强版综合报告 CSV
+ */
+export function exportEnhancedReportCsv() {
+  return downloadFile("/api/export/enhanced_report.csv");
+}
+
+/**
+ * 导出增强版综合报告 Excel
+ */
+export function exportEnhancedReportExcel() {
+  return downloadFile("/api/export/enhanced_report.xlsx");
+}
+
 /* ===== 评论地理分布（省份热力数据） ===== */
 export async function getCommentGeoData(keyword = "") {
   try {

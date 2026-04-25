@@ -69,6 +69,7 @@ const navItems = [
   { path: "/analysis", label: "PySpark 分析", icon: "⚡" },
   { path: "/burst", label: "ML 爆发趋势", icon: "🚀" },
   { path: "/sentiment", label: "评论情感分析", icon: "🌍" },
+  { path: "/sentiment-analysis", label: "情感语义分析", icon: "💡" },
 ];
 
 let timer = null;
