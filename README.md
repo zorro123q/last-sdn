@@ -16,6 +16,10 @@
 
 `hot_search_raw -> ml 特征工程 -> 爆发趋势识别 -> TF-IDF + KMeans 主题聚类 -> MySQL 结果表 -> FastAPI 机器学习接口 -> Vue BurstAnalysis 页面 -> CSV / Excel 报告导出`
 
+第五期新增情感分析与语义聚类增强：
+
+`hot_search_raw -> sentiment SnowNLP 情感分析 -> hot_search_sentiment_stats / hot_search_sentiment_daily_stats -> semantic Sentence-Transformers 语义向量聚类 -> hot_search_semantic_clusters -> FastAPI 情感语义接口 -> Vue SentimentAnalysis 页面 -> CSV / Excel 增强版报告导出`
+
 项目不引入 Redis、Kafka、Spark Streaming、Structured Streaming、登录鉴权或 WebSocket。
 
 ## 1. 项目结构
@@ -50,6 +54,21 @@ weibo-hot-project/
 │  ├─ report_exporter.py
 │  ├─ model_store/.gitkeep
 │  └─ requirements.txt
+├─ sentiment/                    # 第五期：情感分析模块
+│  ├─ config.py
+│  ├─ data_loader.py
+│  ├─ sentiment_analyzer.py
+│  ├─ sentiment_job.py
+│  ├─ mysql_writer.py
+│  └─ requirements.txt
+├─ semantic/                     # 第五期：语义聚类模块
+│  ├─ config.py
+│  ├─ data_loader.py
+│  ├─ embedding_cluster.py
+│  ├─ semantic_cluster_job.py
+│  ├─ mysql_writer.py
+│  ├─ model_cache/.gitkeep
+│  └─ requirements.txt
 ├─ backend/
 │  ├─ main.py
 │  ├─ config.py
@@ -59,20 +78,29 @@ weibo-hot-project/
 │  │  ├─ ml_analysis.py
 │  │  ├─ ranking.py
 │  │  ├─ trend.py
-│  │  └─ summary.py
+│  │  ├─ summary.py
+│  │  └─ sentiment_semantic.py   # 第五期新增
 │  └─ services/
 │     ├─ analysis_service.py
 │     ├─ ml_analysis_service.py
-│     └─ mysql_service.py
+│     ├─ mysql_service.py
+│     └─ sentiment_semantic_service.py  # 第五期新增
 ├─ frontend/
-│  └─ src/views/
-│     ├─ Dashboard.vue
-│     ├─ Analysis.vue
-│     └─ BurstAnalysis.vue
+│  └─ src/
+│     ├─ main.js
+│     ├─ App.vue
+│     ├─ api/index.js
+│     └─ views/
+│        ├─ Dashboard.vue
+│        ├─ Analysis.vue
+│        ├─ BurstAnalysis.vue
+│        ├─ SentimentMap.vue
+│        └─ SentimentAnalysis.vue   # 第五期新增
 └─ sql/
    ├─ init.sql
    ├─ v3_stats.sql
-   └─ v4_ml_analysis.sql
+   ├─ v4_ml_analysis.sql
+   └─ v5_sentiment_semantic.sql   # 第五期新增
 ```
 
 ## 2. 环境要求
@@ -127,6 +155,22 @@ Copy-Item .env.example .env
 - `ML_TOP_LIMIT`：爆发趋势识别结果最多写入条数，默认 `100`。
 - `ML_MODEL_DIR`：模型文件保存目录，默认 `ml/model_store`。
 
+第五期情感分析配置含义：
+
+- `SENTIMENT_METHOD`：情感分析方法，默认 `snownlp`。
+- `SENTIMENT_POSITIVE_THRESHOLD`：正向情感阈值，默认 `0.6`。
+- `SENTIMENT_NEGATIVE_THRESHOLD`：负向情感阈值，默认 `0.4`。
+- `SENTIMENT_TOP_LIMIT`：最多分析条数，默认 `100`。
+
+第五期语义聚类配置含义：
+
+- `SEMANTIC_EMBEDDING_METHOD`：嵌入方法，默认 `sentence_transformers`。
+- `SEMANTIC_MODEL_NAME`：sentence-transformers 模型名，默认 `paraphrase-multilingual-MiniLM-L12-v2`。
+- `SEMANTIC_LOCAL_MODEL_PATH`：本地模型路径，如果不为空则优先从本地加载。
+- `SEMANTIC_CLUSTER_COUNT`：语义聚类数量，默认 `6`。
+- `SEMANTIC_TOP_LIMIT`：最多分析条数，默认 `500`。
+- `SEMANTIC_FALLBACK_TO_TFIDF`：是否允许 TF-IDF fallback，默认 `true`。
+
 ## 4. 初始化步骤
 
 ### 4.1 创建原始表
@@ -171,7 +215,21 @@ mysql -u root -p weibo_hot < sql/v4_ml_analysis.sql
 
 如果 PowerShell 不支持 `<` 重定向，请使用上面的 `cmd /c` 写法。
 
-### 4.4 创建 conda 环境并安装依赖
+### 4.4 创建第五期情感分析与语义聚类结果表
+
+```powershell
+cmd /c "mysql -u root -p weibo_hot < sql\v5_sentiment_semantic.sql"
+```
+
+等价的 MySQL 命令是：
+
+```powershell
+mysql -u root -p weibo_hot < sql/v5_sentiment_semantic.sql
+```
+
+如果 PowerShell 不支持 `<` 重定向，请使用上面的 `cmd /c` 写法。
+
+### 4.5 创建 conda 环境并安装依赖
 
 ```powershell
 conda create -n sdn python=3.11
@@ -192,6 +250,22 @@ cd ..
 
 ```powershell
 cd ml
+pip install -r requirements.txt
+cd ..
+```
+
+安装第五期情感分析依赖：
+
+```powershell
+cd sentiment
+pip install -r requirements.txt
+cd ..
+```
+
+安装第五期语义聚类依赖：
+
+```powershell
+cd semantic
 pip install -r requirements.txt
 cd ..
 ```
@@ -264,6 +338,31 @@ python ml/topic_cluster.py
 
 - `hot_search_topic_clusters`
 
+### 5.5 运行情感分析（第五期）
+
+确认已经采集到 `hot_search_raw` 数据，并已经执行 `sql/v5_sentiment_semantic.sql` 后，在项目根目录运行：
+
+```powershell
+python sentiment/sentiment_job.py
+```
+
+任务会使用 `SnowNLP` 对热搜标题进行情感分析，并写入：
+
+- `hot_search_sentiment_stats`
+- `hot_search_sentiment_daily_stats`
+
+### 5.5.2 运行语义聚类（第五期）
+
+```powershell
+python semantic/semantic_cluster_job.py
+```
+
+任务会使用 `sentence-transformers` 生成语义向量，`KMeans` 进行聚类，并写入：
+
+- `hot_search_semantic_clusters`
+
+如果 sentence-transformers 模型下载失败或环境不支持，系统会自动回退到 TF-IDF + KMeans。
+
 ### 5.6 启动后端服务
 
 新开一个终端，在项目根目录执行：
@@ -297,6 +396,8 @@ npm run dev
 - 首页大屏
 - PySpark 分析
 - 机器学习分析
+- 评论情感分析（模拟数据）
+- 情感语义分析（第五期）
 
 ## 6. 接口说明
 
@@ -333,6 +434,23 @@ GET /api/export/ml_report.xlsx
 
 `POST /api/ml/burst/run` 会在后端后台触发 `python ml/predict_job.py`；`POST /api/ml/topics/run` 会触发 `python ml/topic_cluster.py`。命令行手动运行更适合查看完整日志。
 
+第五期情感分析与语义聚类接口：
+
+```http
+GET /api/sentiment/summary
+GET /api/sentiment/daily
+GET /api/sentiment/top?limit=20&label=positive
+GET /api/sentiment/search?keyword=高考
+POST /api/sentiment/run
+GET /api/semantic/clusters
+GET /api/semantic/clusters/summary
+POST /api/semantic/run
+GET /api/export/enhanced_report.csv
+GET /api/export/enhanced_report.xlsx
+```
+
+`POST /api/sentiment/run` 会触发 `python sentiment/sentiment_job.py`；`POST /api/semantic/run` 会触发 `python semantic/semantic_cluster_job.py`。命令行手动运行更适合查看完整日志。
+
 ## 7. 验证方式
 
 ### 7.1 验证采集是否成功
@@ -364,6 +482,16 @@ SELECT * FROM hot_search_burst_predictions ORDER BY burst_probability DESC LIMIT
 SELECT * FROM hot_search_topic_clusters ORDER BY cluster_id ASC, hot_value DESC LIMIT 10;
 ```
 
+### 7.3 验证第五期情感分析与语义聚类是否成功
+
+运行第五期任务后，在 MySQL 中执行：
+
+```sql
+SELECT * FROM hot_search_sentiment_stats ORDER BY sentiment_score DESC LIMIT 10;
+SELECT * FROM hot_search_sentiment_daily_stats ORDER BY stat_date ASC;
+SELECT * FROM hot_search_semantic_clusters ORDER BY cluster_id ASC, hot_value DESC LIMIT 10;
+```
+
 ### 7.4 验证后端接口
 
 在 PowerShell 中执行：
@@ -380,6 +508,14 @@ Invoke-RestMethod http://127.0.0.1:8000/api/ml/topics
 Invoke-RestMethod http://127.0.0.1:8000/api/ml/topics/summary
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/ml/burst/run
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/ml/topics/run
+Invoke-RestMethod http://127.0.0.1:8000/api/sentiment/summary
+Invoke-RestMethod http://127.0.0.1:8000/api/sentiment/daily
+Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/top?limit=20"
+Invoke-RestMethod "http://127.0.0.1:8000/api/sentiment/search?keyword=高考"
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/sentiment/run
+Invoke-RestMethod http://127.0.0.1:8000/api/semantic/clusters
+Invoke-RestMethod http://127.0.0.1:8000/api/semantic/clusters/summary
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/semantic/run
 ```
 
 浏览器也可以直接访问：
@@ -398,9 +534,11 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/ml/topics/run
 
 - 首页大屏展示统计概览、当前热搜榜、关键词趋势折线图。
 - PySpark 分析页展示关键词 Top20 柱状图、每日采集统计折线图和明细表。
-- 如果没有分析结果，页面提示“暂无分析数据，请先运行 PySpark 分析任务”。
+- 如果没有分析结果，页面提示"暂无分析数据，请先运行 PySpark 分析任务"。
 - 机器学习分析页展示爆发趋势 Top20、爆发概率柱状图、趋势方向统计图、主题聚类分布图和主题聚类表格。
-- 机器学习分析页可以点击“运行爆发趋势识别”“运行主题聚类分析”“导出 CSV 报告”“导出 Excel 报告”。
+- 机器学习分析页可以点击"运行爆发趋势识别""运行主题聚类分析""导出 CSV 报告""导出 Excel 报告"。
+- 情感语义分析页（第五期）展示情感概览卡片、情感分布饼图、公众情绪指数折线图、情绪 Top20 表格、语义聚类分布图和语义聚类明细表。
+- 情感语义分析页可以点击"运行情感分析""运行语义聚类""导出 CSV 综合报告""导出 Excel 综合报告"。
 
 ### 7.6 验证报告导出
 
@@ -415,6 +553,25 @@ CSV 报告包含多个 section；Excel 报告包含多 Sheet：
 - 主题聚类
 - 关键词统计
 - 每日统计
+- 当前热搜榜
+
+### 7.7 验证第五期增强报告导出
+
+浏览器访问：
+
+- `http://127.0.0.1:8000/api/export/enhanced_report.csv`
+- `http://127.0.0.1:8000/api/export/enhanced_report.xlsx`
+
+增强版报告包含：
+
+- 情感分析汇总
+- 每日情绪统计
+- 情感分析 Top100
+- 语义聚类结果
+- 语义主题分布
+- 爆发趋势 Top100
+- TF-IDF 主题聚类
+- 关键词统计
 - 当前热搜榜
 
 ## 8. 常见问题
@@ -448,7 +605,7 @@ cmd /c "mysql -u root -p weibo_hot < sql\v3_stats.sql"
 
 ### 后端数据库连接失败
 
-如果前端提示“数据库连接失败，请检查 MySQL 服务和 .env 配置”，请确认 MySQL 已启动，并检查 `.env` 中的 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`。
+如果前端提示"数据库连接失败，请检查 MySQL 服务和 .env 配置"，请确认 MySQL 已启动，并检查 `.env` 中的 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE`。
 
 ### JAVA_HOME is not set
 
@@ -496,7 +653,7 @@ cmd /c "mysql -u root -p weibo_hot < sql\v4_ml_analysis.sql"
 
 ### 历史数据不足，无法训练模型
 
-第四期会先使用弱监督规则生成标签。如果样本量太少或类别不足，控制台会提示“样本不足或类别不足，使用规则结果作为预测结果”。这不是程序错误，可以继续采集更多批次后重新运行：
+第四期会先使用弱监督规则生成标签。如果样本量太少或类别不足，控制台会提示"样本不足或类别不足，使用规则结果作为预测结果"。这不是程序错误，可以继续采集更多批次后重新运行：
 
 ```powershell
 python ml/predict_job.py
@@ -520,9 +677,76 @@ pip install -r requirements.txt
 cd ..
 ```
 
+### Table hot_search_sentiment_stats doesn't exist
+
+说明第五期情感分析结果表没有创建，请执行：
+
+```powershell
+cmd /c "mysql -u root -p weibo_hot < sql\v5_sentiment_semantic.sql"
+```
+
+### Table hot_search_sentiment_daily_stats doesn't exist
+
+说明第五期每日情感统计表没有创建，请执行 `sql/v5_sentiment_semantic.sql`。
+
+### Table hot_search_semantic_clusters doesn't exist
+
+说明第五期语义聚类结果表没有创建，请执行 `sql/v5_sentiment_semantic.sql`。
+
+### snownlp 未安装
+
+请安装第五期情感分析依赖：
+
+```powershell
+cd sentiment
+pip install -r requirements.txt
+cd ..
+```
+
+### sentence-transformers 未安装
+
+请安装第五期语义聚类依赖：
+
+```powershell
+cd semantic
+pip install -r requirements.txt
+cd ..
+```
+
+### sentence-transformers 模型下载失败
+
+如果首次运行语义聚类任务时下载模型失败，可以：
+
+1. 配置 `SEMANTIC_LOCAL_MODEL_PATH` 使用本地已下载的模型路径
+2. 或者设置 `SEMANTIC_FALLBACK_TO_TFIDF=true` 使用 TF-IDF fallback
+
+### 使用 TF-IDF fallback
+
+如果 sentence-transformers 不可用或模型加载失败，系统会自动回退到 TF-IDF + KMeans 聚类。日志会显示 `[semantic] 使用 TF-IDF fallback`，这是正常行为。
+
 ### 中文分词结果为空或聚类样本数量不足
 
-请确认 `hot_search_raw` 中有足够多的非空中文标题。样本太少时主题聚类任务会提示“可聚类标题数量不足，跳过主题聚类”，不会中断整个项目。
+请确认 `hot_search_raw` 中有足够多的非空中文标题。样本太少时情感分析或语义聚类任务会提示相应信息，不会中断整个项目。
+
+### sentiment/sentiment_job.py 模块导入失败
+
+推荐在项目根目录运行：
+
+```powershell
+python sentiment/sentiment_job.py
+```
+
+### semantic/semantic_cluster_job.py 模块导入失败
+
+推荐在项目根目录运行：
+
+```powershell
+python semantic/semantic_cluster_job.py
+```
+
+### 中文分词结果为空或聚类样本数量不足
+
+请确认 `hot_search_raw` 中有足够多的非空中文标题。样本太少时主题聚类任务会提示"可聚类标题数量不足，跳过主题聚类"，不会中断整个项目。
 
 ### ml/predict_job.py 模块导入失败
 
@@ -573,11 +797,27 @@ python analysis/batch_job.py
 - `topic_cluster.py` 使用 jieba 分词、TF-IDF 和 KMeans 对热搜标题进行主题聚类，并根据关键词规则生成娱乐热点、教育考试、科技财经、体育赛事、社会事件、综合热点等主题名。
 - `report_exporter.py` 支持 CSV 和 Excel 报告导出，部分统计表不存在时会在报告中写入中文提示。
 
+### sentiment（第五期新增）
+
+- 使用 SnowNLP 对中文热搜标题进行情感分析。
+- 计算情感分数（0-1），根据阈值划分正向、中性、负向情感。
+- 生成每日情感统计：平均情感分数、正向/中性/负向数量和占比。
+- 结果写入 `hot_search_sentiment_stats` 和 `hot_search_sentiment_daily_stats`。
+
+### semantic（第五期新增）
+
+- 使用 sentence-transformers 生成语义向量，支持多语言模型。
+- 如果模型不可用或加载失败，自动回退到 TF-IDF + KMeans。
+- 使用 jieba 分词提取高频关键词作为聚类标签。
+- 根据关键词规则生成聚类主题名称：娱乐热点、教育考试、科技财经、体育赛事、社会事件、自然天气、综合热点。
+- 结果写入 `hot_search_semantic_clusters`。
+
 ### backend
 
 - 使用 FastAPI 提供 `/api/summary`、`/api/ranking/current`、`/api/trend`。
 - 第三期新增 `/api/analysis/keywords/top`、`/api/analysis/daily`。
 - 第四期新增 `/api/ml/burst/top`、`/api/ml/burst/search`、`/api/ml/topics`、`/api/ml/topics/summary` 和 `/api/export/ml_report.csv`。
+- 第五期新增 `/api/sentiment/summary`、`/api/sentiment/daily`、`/api/sentiment/top`、`/api/sentiment/search`、`/api/sentiment/run`、`/api/semantic/clusters`、`/api/semantic/clusters/summary`、`/api/semantic/run` 和 `/api/export/enhanced_report.csv`、`/api/export/enhanced_report.xlsx`。
 - 数据库连接或查询异常时返回中文错误提示。
 
 ### frontend
@@ -586,3 +826,4 @@ python analysis/batch_job.py
 - 首页大屏使用 ECharts 展示关键词趋势折线图。
 - PySpark 分析页展示关键词 Top20 柱状图和每日统计折线图。
 - 机器学习分析页展示爆发趋势表格、爆发概率柱状图、趋势方向统计图、主题聚类分布图、主题聚类明细表和报告导出按钮。
+- 情感语义分析页（第五期）展示情感概览卡片、情感分布饼图、公众情绪指数折线图、情绪 Top20 表格、语义聚类分布图和语义聚类明细表，支持运行情感分析任务、运行语义聚类任务和导出增强版综合报告。
