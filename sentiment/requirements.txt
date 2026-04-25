@@ -1,0 +1,12 @@
+# sentiment/requirements.txt - 情感分析模块依赖
+
+pandas
+pymysql
+python-dotenv
+snownlp
+
+# 注意：
+# 1. 不添加 tensorflow
+# 2. 不添加 torch
+# 3. 不添加 transformers
+# 4. 情感分析第一版只使用 SnowNLP，后续可扩展 HuggingFace 模型
