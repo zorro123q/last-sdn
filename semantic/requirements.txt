@@ -1,0 +1,16 @@
+# semantic/requirements.txt - 语义聚类模块依赖
+
+pandas
+pymysql
+python-dotenv
+scikit-learn
+jieba
+sentence-transformers
+openpyxl
+
+# 注意：
+# 1. sentence-transformers 可能会安装较多依赖，代码必须支持不可用时回退到 TF-IDF
+# 2. 不要显式添加 tensorflow
+# 3. 不要显式添加 torch，除非 sentence-transformers 依赖自动安装
+# 4. 如果 sentence-transformers 下载模型失败，可以先使用 TF-IDF fallback
+# 5. 也可以配置 SEMANTIC_LOCAL_MODEL_PATH 使用本地模型路径
