@@ -3,7 +3,9 @@
 from datetime import datetime
 from typing import Any
 
-from database import get_connection
+import pymysql
+
+from database import DatabaseConnectionError, DatabaseQueryError, get_connection
 
 
 class MySQLService:
@@ -91,23 +93,37 @@ class MySQLService:
 
     def _fetch_one(self, sql: str, params: tuple[Any, ...] | None = None) -> dict[str, Any] | None:
         """执行单行查询。"""
-        connection = get_connection()
+        connection = None
         try:
+            connection = get_connection()
             with connection.cursor() as cursor:
                 cursor.execute(sql, params or ())
                 return cursor.fetchone()
+        except DatabaseConnectionError:
+            raise
+        except pymysql.MySQLError as exc:
+            print(f"[backend] 数据查询失败：{exc}")
+            raise DatabaseQueryError("数据查询失败，请稍后重试") from exc
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
 
     def _fetch_all(self, sql: str, params: tuple[Any, ...] | None = None) -> list[dict[str, Any]]:
         """执行多行查询。"""
-        connection = get_connection()
+        connection = None
         try:
+            connection = get_connection()
             with connection.cursor() as cursor:
                 cursor.execute(sql, params or ())
                 return list(cursor.fetchall())
+        except DatabaseConnectionError:
+            raise
+        except pymysql.MySQLError as exc:
+            print(f"[backend] 数据查询失败：{exc}")
+            raise DatabaseQueryError("数据查询失败，请稍后重试") from exc
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
 
     def _serialize_row(self, row: dict[str, Any]) -> dict[str, Any]:
         """把查询结果中的日期时间转换成字符串。"""
