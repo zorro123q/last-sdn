@@ -7,6 +7,8 @@ from fastapi.responses import JSONResponse
 from config import settings
 from database import DatabaseConnectionError, DatabaseQueryError
 from routes.analysis import router as analysis_router
+from routes.ml_analysis import export_router as ml_export_router
+from routes.ml_analysis import router as ml_analysis_router
 from routes.ranking import router as ranking_router
 from routes.summary import router as summary_router
 from routes.trend import router as trend_router
@@ -27,6 +29,8 @@ app.include_router(ranking_router)
 app.include_router(trend_router)
 app.include_router(summary_router)
 app.include_router(analysis_router)
+app.include_router(ml_analysis_router)
+app.include_router(ml_export_router)
 
 
 @app.exception_handler(DatabaseConnectionError)
