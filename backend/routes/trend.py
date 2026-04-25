@@ -1,19 +1,16 @@
-"""关键词趋势接口。"""
+"""趋势查询接口。"""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, HTTPException, Query
 
-from config import BackendConfig, get_settings
-from services.mysql_service import get_keyword_trend
+from services.mysql_service import mysql_service
 
 
-router = APIRouter(prefix="/trend", tags=["trend"])
+router = APIRouter(prefix="/api/trend", tags=["trend"])
 
 
 @router.get("")
-def keyword_trend(
-    keyword: str = Query(..., min_length=1, description="要查询趋势的关键词"),
-    config: BackendConfig = Depends(get_settings),
-):
-    """按关键词查询趋势数据。"""
-
-    return get_keyword_trend(keyword, config)
+def get_keyword_trend(keyword: str = Query(..., description="查询关键词")) -> dict:
+    """根据关键词查询历史热度趋势。"""
+    if not keyword.strip():
+        raise HTTPException(status_code=400, detail="keyword 不能为空。")
+    return mysql_service.get_keyword_trend(keyword)

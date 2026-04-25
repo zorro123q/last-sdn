@@ -1,33 +1,20 @@
-"""数据库和缓存连接工具。"""
+"""数据库连接管理。"""
 
 import pymysql
-import redis
+from pymysql.cursors import DictCursor
 
-from config import BackendConfig
+from config import settings
 
 
-def get_mysql_connection(config: BackendConfig):
-    """创建 MySQL 连接，查询类场景直接使用 DictCursor。"""
-
+def get_connection() -> pymysql.connections.Connection:
+    """创建一个用于查询的 MySQL 连接。"""
     return pymysql.connect(
-        host=config.mysql_host,
-        port=config.mysql_port,
-        user=config.mysql_user,
-        password=config.mysql_password,
-        database=config.mysql_database,
-        charset="utf8mb4",
+        host=settings.mysql_host,
+        port=settings.mysql_port,
+        user=settings.mysql_user,
+        password=settings.mysql_password,
+        database=settings.mysql_database,
+        charset=settings.mysql_charset,
+        cursorclass=DictCursor,
         autocommit=True,
-        cursorclass=pymysql.cursors.DictCursor,
-    )
-
-
-def get_redis_client(config: BackendConfig):
-    """创建 Redis 连接。"""
-
-    return redis.Redis(
-        host=config.redis_host,
-        port=config.redis_port,
-        db=config.redis_db,
-        password=config.redis_password or None,
-        decode_responses=True,
     )

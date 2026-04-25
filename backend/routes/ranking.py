@@ -1,16 +1,14 @@
-"""当前排行榜接口。"""
+"""排行榜接口。"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from config import BackendConfig, get_settings
-from services.redis_service import get_current_ranking
+from services.mysql_service import mysql_service
 
 
-router = APIRouter(prefix="/ranking", tags=["ranking"])
+router = APIRouter(prefix="/api/ranking", tags=["ranking"])
 
 
 @router.get("/current")
-def current_ranking(config: BackendConfig = Depends(get_settings)):
-    """返回 Redis 中的当前热搜榜。"""
-
-    return get_current_ranking(config)
+def get_current_ranking() -> dict:
+    """返回最新一次采集的热搜榜。"""
+    return mysql_service.get_current_ranking()

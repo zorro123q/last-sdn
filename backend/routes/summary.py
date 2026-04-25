@@ -1,16 +1,14 @@
-"""概览接口。"""
+"""统计概览接口。"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from config import BackendConfig, get_settings
-from services.mysql_service import get_summary
-
-
-router = APIRouter(prefix="/summary", tags=["summary"])
+from services.mysql_service import mysql_service
 
 
-@router.get("")
-def summary(config: BackendConfig = Depends(get_settings)):
-    """返回概览统计信息。"""
+router = APIRouter(prefix="/api", tags=["summary"])
 
-    return get_summary(config)
+
+@router.get("/summary")
+def get_summary() -> dict:
+    """返回系统概览统计信息。"""
+    return mysql_service.get_summary()
