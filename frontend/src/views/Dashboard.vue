@@ -3,33 +3,33 @@
     <main class="dashboard">
       <section class="hero">
         <div>
-          <p class="eyebrow">Graduation Demo</p>
-          <h1>Weibo Hot Search Dashboard</h1>
+          <p class="eyebrow">毕业设计演示</p>
+          <h1>微博热搜数据分析系统</h1>
           <p class="hero-text">
-            Python collector, MySQL storage, FastAPI APIs, and a Vue3 + ECharts dashboard.
+            Python 定时采集微博热搜，写入 MySQL 后由 FastAPI 提供接口，并通过 Vue3 + ECharts 展示数据。
           </p>
         </div>
         <div class="hero-badge">
-          <span>Latest Fetch Time</span>
-          <strong>{{ summary.latest_fetch_time || "No data yet" }}</strong>
+          <span>最新采集时间</span>
+          <strong>{{ summary.latest_fetch_time || "暂无数据" }}</strong>
         </div>
       </section>
 
       <section class="cards">
         <article class="card">
-          <span>Total Records</span>
+          <span>累计采集记录</span>
           <strong>{{ formatNumber(summary.total_records) }}</strong>
         </article>
         <article class="card">
-          <span>Total Batches</span>
+          <span>采集批次数</span>
           <strong>{{ formatNumber(summary.total_batches) }}</strong>
         </article>
         <article class="card">
-          <span>Total Keywords</span>
+          <span>关键词总数</span>
           <strong>{{ formatNumber(summary.total_keywords) }}</strong>
         </article>
         <article class="card">
-          <span>Current List Size</span>
+          <span>当前榜单数量</span>
           <strong>{{ formatNumber(summary.latest_batch_count) }}</strong>
         </article>
       </section>
@@ -37,17 +37,17 @@
       <section class="panel">
         <div class="panel-header">
           <div>
-            <h2>Keyword Trend</h2>
-            <p>Search a keyword to view historical hot value changes. You can also click a ranking item.</p>
+            <h2>关键词趋势分析</h2>
+            <p>输入关键词查看历史热度变化，也可以点击当前热搜榜中的条目。</p>
           </div>
           <form class="search-box" @submit.prevent="handleSearch">
             <input
               v-model="keyword"
               type="text"
-              placeholder="Enter keyword, e.g. gaokao"
+              placeholder="请输入关键词，例如：高考"
             />
             <button type="submit" :disabled="loadingTrend">
-              {{ loadingTrend ? "Loading..." : "Search Trend" }}
+              {{ loadingTrend ? "加载中..." : "查询趋势" }}
             </button>
           </form>
         </div>
@@ -62,11 +62,11 @@
         <section class="panel ranking-panel">
           <div class="panel-header">
             <div>
-              <h2>Current Ranking</h2>
-              <p>The latest hot search list fetched from the database.</p>
+              <h2>当前热搜榜</h2>
+              <p>展示数据库中最新一批微博热搜采集结果。</p>
             </div>
             <button class="ghost-button" @click="loadPageData" :disabled="loadingPage">
-              {{ loadingPage ? "Refreshing..." : "Refresh Data" }}
+              {{ loadingPage ? "刷新中..." : "刷新数据" }}
             </button>
           </div>
 
@@ -84,23 +84,23 @@
               <span class="rank-hot">{{ formatNumber(item.hot_value) }}</span>
             </button>
           </div>
-          <div v-else class="empty-state">No ranking data. Run the collector first.</div>
+          <div v-else class="empty-state">当前暂无热搜榜数据，请先运行采集程序</div>
         </section>
 
         <section class="panel">
           <div class="panel-header">
             <div>
-              <h2>Trend Points</h2>
-              <p>Historical trend points for the current keyword.</p>
+              <h2>趋势数据明细</h2>
+              <p>当前关键词对应的历史采集点。</p>
             </div>
           </div>
 
           <table class="trend-table">
             <thead>
               <tr>
-                <th>Fetch Time</th>
-                <th>Hot Value</th>
-                <th>Best Rank</th>
+                <th>采集时间</th>
+                <th>热度值</th>
+                <th>最佳排名</th>
               </tr>
             </thead>
             <tbody>
@@ -110,7 +110,7 @@
                 <td>{{ point.best_rank }}</td>
               </tr>
               <tr v-if="!trendPoints.length">
-                <td colspan="3" class="table-empty">No trend data</td>
+                <td colspan="3" class="table-empty">暂无趋势数据，请更换关键词或先采集更多数据</td>
               </tr>
             </tbody>
           </table>
@@ -136,7 +136,7 @@ const summary = ref({
 const rankingList = ref([]);
 const keyword = ref("");
 const trendPoints = ref([]);
-const trendMessage = ref("Enter a keyword to start the trend query.");
+const trendMessage = ref("请输入关键词后查询趋势。");
 const pageError = ref("");
 const loadingPage = ref(false);
 const loadingTrend = ref(false);
@@ -195,7 +195,7 @@ function buildChart() {
     },
     series: [
       {
-        name: "Hot Value",
+        name: "热度值",
         type: "line",
         smooth: true,
         symbolSize: 8,
@@ -234,7 +234,7 @@ async function loadPageData() {
     pageError.value = "";
     await Promise.all([loadSummaryData(), loadRankingData()]);
   } catch (error) {
-    pageError.value = error.message || "Page initialization failed. Check whether the backend is running.";
+    pageError.value = error.message || "数据加载失败，请检查后端接口和数据库连接";
   } finally {
     loadingPage.value = false;
   }
@@ -246,7 +246,7 @@ async function queryTrend(targetKeyword = keyword.value) {
 
   if (!cleanedKeyword) {
     trendPoints.value = [];
-    trendMessage.value = "Enter a keyword before searching.";
+    trendMessage.value = "请输入关键词后再查询。";
     buildChart();
     return;
   }
@@ -256,12 +256,12 @@ async function queryTrend(targetKeyword = keyword.value) {
     const response = await getTrend(cleanedKeyword);
     trendPoints.value = response.points || [];
     trendMessage.value = trendPoints.value.length
-      ? `Current keyword: ${response.keyword}`
-      : `No historical trend data found for "${response.keyword}".`;
+      ? `当前关键词：${response.keyword}`
+      : `暂无“${response.keyword}”的趋势数据，请更换关键词或先采集更多数据。`;
     buildChart();
   } catch (error) {
     trendPoints.value = [];
-    trendMessage.value = error.message || "Trend query failed.";
+    trendMessage.value = error.message || "查询失败，请检查后端服务是否启动";
     buildChart();
   } finally {
     loadingTrend.value = false;
