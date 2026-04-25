@@ -1,0 +1,7 @@
+pandas
+pymysql
+python-dotenv
+scikit-learn
+jieba
+joblib
+openpyxl
