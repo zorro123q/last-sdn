@@ -45,6 +45,8 @@ class CollectorSettings:
     weibo_api_timeout: int
     weibo_api_source: str
     weibo_cookie: str
+    weibo_api_retry_times: int
+    weibo_api_retry_delay_seconds: int
     collect_user_agent: str
     collect_interval_seconds: int
     collect_run_once: bool
@@ -61,6 +63,8 @@ settings = CollectorSettings(
     weibo_api_timeout=_get_int("WEIBO_API_TIMEOUT", 10),
     weibo_api_source=os.getenv("WEIBO_API_SOURCE", "weibo"),
     weibo_cookie=os.getenv("WEIBO_COOKIE", ""),
+    weibo_api_retry_times=max(_get_int("WEIBO_API_RETRY_TIMES", 3), 1),
+    weibo_api_retry_delay_seconds=max(_get_int("WEIBO_API_RETRY_DELAY_SECONDS", 2), 0),
     collect_user_agent=os.getenv(
         "COLLECT_USER_AGENT",
         (
@@ -69,6 +73,6 @@ settings = CollectorSettings(
             "Chrome/123.0.0.0 Safari/537.36"
         ),
     ),
-    collect_interval_seconds=max(_get_int("COLLECT_INTERVAL_SECONDS", 300), 1),
+    collect_interval_seconds=max(_get_int("COLLECT_INTERVAL_SECONDS", 120), 1),
     collect_run_once=_get_bool("COLLECT_RUN_ONCE", False),
 )

@@ -1,6 +1,7 @@
 """微博热搜接口请求与结果解析。"""
 
 import re
+import time
 from datetime import datetime
 from typing import Any
 
@@ -24,21 +25,57 @@ class WeiboApiClient:
 
     def fetch_hot_search(self) -> list[dict[str, Any]]:
         """拉取热搜接口并转换为统一字段。"""
-        response = requests.get(
-            settings.weibo_api_url,
-            headers=self.headers,
-            timeout=settings.weibo_api_timeout,
-        )
-        response.raise_for_status()
-
-        payload = response.json()
+        payload = self._request_payload()
         fetch_time = datetime.now()
         items = self._normalize_records(payload, fetch_time)
 
         if not items:
-            raise ValueError("接口请求成功，但未解析到热搜数据。")
+            print("[weibo] 接口请求成功，但未解析到热搜数据，请检查接口返回结构或 Cookie。")
+            raise ValueError("当前未解析到微博热搜数据，请稍后重试或配置 WEIBO_COOKIE。")
 
         return items
+
+    def _request_payload(self) -> Any:
+        """请求微博接口；网络不稳定时按配置重试，最终仍失败则抛出最后一次异常。"""
+        last_error: Exception | None = None
+        retry_times = settings.weibo_api_retry_times
+
+        for attempt in range(1, retry_times + 2):
+            try:
+                response = requests.get(
+                    settings.weibo_api_url,
+                    headers=self.headers,
+                    timeout=settings.weibo_api_timeout,
+                )
+                response.raise_for_status()
+                try:
+                    return response.json()
+                except ValueError as exc:
+                    print("[weibo] 微博接口返回异常 JSON，请检查接口访问状态或 Cookie。")
+                    raise ValueError("微博接口返回异常 JSON，暂时无法解析热搜数据。") from exc
+            except (
+                requests.exceptions.SSLError,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                requests.exceptions.HTTPError,
+            ) as exc:
+                last_error = exc
+                if attempt <= retry_times:
+                    print(
+                        f"[{datetime.now():%Y-%m-%d %H:%M:%S}] "
+                        f"微博接口请求失败，第 {attempt}/{retry_times} 次重试，原因：{exc}"
+                    )
+                    time.sleep(settings.weibo_api_retry_delay_seconds)
+                else:
+                    print(
+                        f"[{datetime.now():%Y-%m-%d %H:%M:%S}] "
+                        f"微博接口请求失败，{retry_times} 次重试均失败，原因：{exc}"
+                    )
+
+        if last_error is not None:
+            raise last_error
+
+        raise RuntimeError("微博接口请求失败，请检查网络和接口配置。")
 
     def _normalize_records(
         self, payload: dict[str, Any], fetch_time: datetime
