@@ -1,7 +1,7 @@
 {
-  "name": "weibo-hot-dashboard",
-  "version": "0.1.0",
+  "name": "weibo-hot-frontend",
   "private": true,
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,12 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "axios": "^1.7.2",
     "echarts": "^5.5.1",
-    "vue": "^3.4.29"
+    "vue": "^3.5.13"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.5",
-    "vite": "^5.3.1"
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^6.0.5"
   }
 }

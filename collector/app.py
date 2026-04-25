@@ -1,55 +1,45 @@
-"""采集入口脚本。"""
+"""微博热搜定时采集入口。"""
 
-import logging
 import time
+from datetime import datetime
 
-from api_client import fetch_hot_searches
-from config import CollectorConfig
-from kafka_producer import HotSearchProducer
-
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+from api_client import WeiboApiClient
+from config import settings
+from db_writer import MySQLWriter
 
 
-def run_collector() -> None:
-    """循环拉取微博热搜并写入 Kafka。"""
+def collect_once() -> int:
+    """执行一次采集和入库。"""
+    client = WeiboApiClient()
+    writer = MySQLWriter()
 
-    config = CollectorConfig()
-    producer = HotSearchProducer(
-        bootstrap_servers=config.kafka_bootstrap_servers,
-        topic=config.kafka_topic,
-        client_id=config.kafka_client_id,
-        retries=config.kafka_retries,
+    records = client.fetch_hot_search()
+    saved_count = writer.save_records(records)
+    print(
+        f"[{datetime.now():%Y-%m-%d %H:%M:%S}] 本次采集完成，"
+        f"获取 {len(records)} 条，写入 {saved_count} 条。"
     )
+    return saved_count
 
-    logging.info("采集器启动，目标 Kafka Topic: %s", config.kafka_topic)
 
-    try:
-        while True:
-            try:
-                payload = fetch_hot_searches(config)
-                metadata = producer.send(payload)
-                logging.info(
-                    "采集成功，条目数=%s，Kafka partition=%s，offset=%s",
-                    len(payload["items"]),
-                    metadata.partition,
-                    metadata.offset,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logging.exception("采集或发送失败: %s", exc)
+def main() -> None:
+    """按配置执行单次或循环采集。"""
+    print("微博热搜采集程序启动。")
+    print(f"采集间隔：{settings.collect_interval_seconds} 秒。")
+    print(f"请求地址：{settings.weibo_api_url}")
 
-            if config.run_once:
-                break
+    while True:
+        try:
+            collect_once()
+        except Exception as exc:
+            print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] 采集失败：{exc}")
 
-            time.sleep(config.collect_interval)
-    except KeyboardInterrupt:
-        logging.info("收到中断信号，准备退出采集器。")
-    finally:
-        producer.close()
+        if settings.collect_run_once:
+            print("当前为单次执行模式，程序结束。")
+            break
+
+        time.sleep(settings.collect_interval_seconds)
 
 
 if __name__ == "__main__":
-    run_collector()
+    main()

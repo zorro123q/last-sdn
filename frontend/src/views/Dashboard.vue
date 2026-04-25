@@ -1,103 +1,155 @@
 <template>
-  <div class="page">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">Weibo Hot Search Streaming Analytics</p>
-        <h1>微博热搜准实时分析系统</h1>
-        <p class="subtitle">
-          第一版聚焦最小可运行链路：采集、流处理、缓存、接口和可视化看板。
-        </p>
-      </div>
-      <button class="refresh-btn" @click="loadDashboard" :disabled="loading">
-        {{ loading ? "刷新中..." : "刷新数据" }}
-      </button>
-    </header>
-
-    <section class="summary-grid">
-      <article class="summary-card">
-        <span>总记录数</span>
-        <strong>{{ summary.total_records }}</strong>
-      </article>
-      <article class="summary-card">
-        <span>关键词数量</span>
-        <strong>{{ summary.unique_keywords }}</strong>
-      </article>
-      <article class="summary-card">
-        <span>最新采集时间</span>
-        <strong>{{ summary.latest_fetch_time || "-" }}</strong>
-      </article>
-    </section>
-
-    <p v-if="message" class="message">{{ message }}</p>
-
-    <section class="content-grid">
-      <article class="panel">
-        <div class="panel-header">
-          <h2>当前热搜榜</h2>
-          <span>{{ rankingPayload.latest_fetch_time || "暂无刷新时间" }}</span>
+  <div class="page-shell">
+    <main class="dashboard">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Graduation Demo</p>
+          <h1>Weibo Hot Search Dashboard</h1>
+          <p class="hero-text">
+            Python collector, MySQL storage, FastAPI APIs, and a Vue3 + ECharts dashboard.
+          </p>
         </div>
-        <div v-if="rankingPayload.data.length === 0" class="empty-state">Redis 中还没有排行榜数据。</div>
-        <ul v-else class="ranking-list">
-          <li v-for="item in rankingPayload.data" :key="item.rank + item.title">
-            <div class="rank-meta">
-              <span class="rank-no">{{ item.rank }}</span>
-              <span class="rank-title">{{ item.title }}</span>
+        <div class="hero-badge">
+          <span>Latest Fetch Time</span>
+          <strong>{{ summary.latest_fetch_time || "No data yet" }}</strong>
+        </div>
+      </section>
+
+      <section class="cards">
+        <article class="card">
+          <span>Total Records</span>
+          <strong>{{ formatNumber(summary.total_records) }}</strong>
+        </article>
+        <article class="card">
+          <span>Total Batches</span>
+          <strong>{{ formatNumber(summary.total_batches) }}</strong>
+        </article>
+        <article class="card">
+          <span>Total Keywords</span>
+          <strong>{{ formatNumber(summary.total_keywords) }}</strong>
+        </article>
+        <article class="card">
+          <span>Current List Size</span>
+          <strong>{{ formatNumber(summary.latest_batch_count) }}</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>Keyword Trend</h2>
+            <p>Search a keyword to view historical hot value changes. You can also click a ranking item.</p>
+          </div>
+          <form class="search-box" @submit.prevent="handleSearch">
+            <input
+              v-model="keyword"
+              type="text"
+              placeholder="Enter keyword, e.g. gaokao"
+            />
+            <button type="submit" :disabled="loadingTrend">
+              {{ loadingTrend ? "Loading..." : "Search Trend" }}
+            </button>
+          </form>
+        </div>
+
+        <div class="chart-panel">
+          <div ref="chartRef" class="chart"></div>
+        </div>
+        <p v-if="trendMessage" class="helper-text">{{ trendMessage }}</p>
+      </section>
+
+      <section class="content-grid">
+        <section class="panel ranking-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Current Ranking</h2>
+              <p>The latest hot search list fetched from the database.</p>
             </div>
-            <span class="hot-value">{{ item.hot_value }}</span>
-          </li>
-        </ul>
-      </article>
+            <button class="ghost-button" @click="loadPageData" :disabled="loadingPage">
+              {{ loadingPage ? "Refreshing..." : "Refresh Data" }}
+            </button>
+          </div>
 
-      <article class="panel">
-        <div class="panel-header">
-          <h2>关键词趋势</h2>
-          <span>按采集时间聚合最大热度值</span>
-        </div>
-        <form class="trend-form" @submit.prevent="handleSearch">
-          <input v-model.trim="keyword" type="text" placeholder="输入关键词，例如：电影" />
-          <button type="submit">查询趋势</button>
-        </form>
-        <div ref="chartRef" class="chart"></div>
-      </article>
-    </section>
+          <p v-if="pageError" class="helper-text danger-text">{{ pageError }}</p>
+
+          <div v-if="rankingList.length" class="ranking-list">
+            <button
+              v-for="item in rankingList"
+              :key="`${item.fetch_time}-${item.rank_num}-${item.title}`"
+              class="ranking-item"
+              @click="queryTrend(item.title)"
+            >
+              <span class="rank-no">{{ item.rank_num }}</span>
+              <span class="rank-title">{{ item.title }}</span>
+              <span class="rank-hot">{{ formatNumber(item.hot_value) }}</span>
+            </button>
+          </div>
+          <div v-else class="empty-state">No ranking data. Run the collector first.</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Trend Points</h2>
+              <p>Historical trend points for the current keyword.</p>
+            </div>
+          </div>
+
+          <table class="trend-table">
+            <thead>
+              <tr>
+                <th>Fetch Time</th>
+                <th>Hot Value</th>
+                <th>Best Rank</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="point in trendPoints" :key="point.fetch_time">
+                <td>{{ point.fetch_time }}</td>
+                <td>{{ formatNumber(point.hot_value) }}</td>
+                <td>{{ point.best_rank }}</td>
+              </tr>
+              <tr v-if="!trendPoints.length">
+                <td colspan="3" class="table-empty">No trend data</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </section>
+    </main>
   </div>
 </template>
 
 <script setup>
-// 看板页面负责聚合概览、排行和趋势展示。
-import * as echarts from "echarts";
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import * as echarts from "echarts";
 
-import { fetchCurrentRanking, fetchSummary, fetchTrend } from "../api/index.js";
+import { getCurrentRanking, getSummary, getTrend } from "../api/index.js";
 
-const loading = ref(false);
-const message = ref("");
-const keyword = ref("");
-const chartRef = ref(null);
-const rankingPayload = ref({
-  data: [],
-  count: 0,
-  latest_fetch_time: null
-});
-const trendPayload = ref({
-  keyword: "",
-  data: []
-});
 const summary = ref({
   total_records: 0,
-  unique_keywords: 0,
-  latest_fetch_time: null
+  total_batches: 0,
+  total_keywords: 0,
+  latest_batch_count: 0,
+  latest_fetch_time: ""
 });
+const rankingList = ref([]);
+const keyword = ref("");
+const trendPoints = ref([]);
+const trendMessage = ref("Enter a keyword to start the trend query.");
+const pageError = ref("");
+const loadingPage = ref(false);
+const loadingTrend = ref(false);
+const chartRef = ref(null);
 
 let chartInstance = null;
 
-function resizeChart() {
-  if (chartInstance) {
-    chartInstance.resize();
-  }
+function formatNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number.toLocaleString("zh-CN") : "0";
 }
 
-function renderChart() {
+function buildChart() {
   if (!chartRef.value) {
     return;
   }
@@ -106,53 +158,57 @@ function renderChart() {
     chartInstance = echarts.init(chartRef.value);
   }
 
-  const xAxisData = trendPayload.value.data.map((item) => item.fetch_time);
-  const seriesData = trendPayload.value.data.map((item) => item.hot_value);
-
   chartInstance.setOption({
+    backgroundColor: "transparent",
     tooltip: {
       trigger: "axis"
     },
     grid: {
-      left: 48,
-      right: 24,
+      left: 40,
+      right: 20,
       top: 40,
-      bottom: 48
+      bottom: 40
     },
     xAxis: {
       type: "category",
-      data: xAxisData,
+      data: trendPoints.value.map((item) => item.fetch_time),
       axisLabel: {
-        color: "#6b7280",
-        rotate: 25
+        color: "#5b6475",
+        rotate: 30
+      },
+      axisLine: {
+        lineStyle: {
+          color: "#9db0d0"
+        }
       }
     },
     yAxis: {
       type: "value",
       axisLabel: {
-        color: "#6b7280"
+        color: "#5b6475"
       },
       splitLine: {
         lineStyle: {
-          color: "#e5e7eb"
+          color: "rgba(104, 128, 170, 0.18)"
         }
       }
     },
     series: [
       {
-        name: trendPayload.value.keyword || "热度值",
+        name: "Hot Value",
         type: "line",
         smooth: true,
-        data: seriesData,
+        symbolSize: 8,
+        data: trendPoints.value.map((item) => item.hot_value),
         lineStyle: {
           width: 3,
-          color: "#ef4444"
+          color: "#e4572e"
         },
         itemStyle: {
-          color: "#f97316"
+          color: "#e4572e"
         },
         areaStyle: {
-          color: "rgba(249, 115, 22, 0.15)"
+          color: "rgba(228, 87, 46, 0.12)"
         }
       }
     ]
@@ -160,62 +216,82 @@ function renderChart() {
 }
 
 async function loadSummaryData() {
-  summary.value = await fetchSummary();
+  summary.value = await getSummary();
 }
 
 async function loadRankingData() {
-  rankingPayload.value = await fetchCurrentRanking();
+  const response = await getCurrentRanking();
+  rankingList.value = response.items || [];
 
-  if (!keyword.value && rankingPayload.value.data.length > 0) {
-    keyword.value = rankingPayload.value.data[0].title;
+  if (!keyword.value && rankingList.value.length) {
+    keyword.value = rankingList.value[0].title;
   }
 }
 
-async function loadTrendData() {
-  if (!keyword.value) {
-    trendPayload.value = { keyword: "", data: [] };
-    renderChart();
+async function loadPageData() {
+  loadingPage.value = true;
+  try {
+    pageError.value = "";
+    await Promise.all([loadSummaryData(), loadRankingData()]);
+  } catch (error) {
+    pageError.value = error.message || "Page initialization failed. Check whether the backend is running.";
+  } finally {
+    loadingPage.value = false;
+  }
+}
+
+async function queryTrend(targetKeyword = keyword.value) {
+  const cleanedKeyword = String(targetKeyword || "").trim();
+  keyword.value = cleanedKeyword;
+
+  if (!cleanedKeyword) {
+    trendPoints.value = [];
+    trendMessage.value = "Enter a keyword before searching.";
+    buildChart();
     return;
   }
 
-  trendPayload.value = await fetchTrend(keyword.value);
-  renderChart();
-}
-
-async function loadDashboard() {
-  loading.value = true;
-  message.value = "";
-
+  loadingTrend.value = true;
   try {
-    await Promise.all([loadSummaryData(), loadRankingData()]);
-    await nextTick();
-    await loadTrendData();
+    const response = await getTrend(cleanedKeyword);
+    trendPoints.value = response.points || [];
+    trendMessage.value = trendPoints.value.length
+      ? `Current keyword: ${response.keyword}`
+      : `No historical trend data found for "${response.keyword}".`;
+    buildChart();
   } catch (error) {
-    const detail = error.response?.data?.detail;
-    message.value = detail || error.message || "加载数据失败，请先确认后端服务已启动。";
+    trendPoints.value = [];
+    trendMessage.value = error.message || "Trend query failed.";
+    buildChart();
   } finally {
-    loading.value = false;
+    loadingTrend.value = false;
   }
 }
 
-async function handleSearch() {
-  try {
-    message.value = "";
-    await loadTrendData();
-  } catch (error) {
-    const detail = error.response?.data?.detail;
-    message.value = detail || error.message || "趋势查询失败。";
+function handleSearch() {
+  queryTrend(keyword.value);
+}
+
+function handleResize() {
+  if (chartInstance) {
+    chartInstance.resize();
   }
 }
 
 onMounted(async () => {
-  await loadDashboard();
-  window.addEventListener("resize", resizeChart);
+  await loadPageData();
+  await nextTick();
+  buildChart();
+
+  if (keyword.value) {
+    await queryTrend(keyword.value);
+  }
+
+  window.addEventListener("resize", handleResize);
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("resize", resizeChart);
-
+  window.removeEventListener("resize", handleResize);
   if (chartInstance) {
     chartInstance.dispose();
     chartInstance = null;
@@ -224,232 +300,316 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.page {
-  max-width: 1280px;
+:global(body) {
+  margin: 0;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(69, 123, 157, 0.24), transparent 28%),
+    linear-gradient(135deg, #eef4ff 0%, #f8fafc 45%, #fff7ef 100%);
+  color: #1f2937;
+}
+
+:global(*) {
+  box-sizing: border-box;
+}
+
+.page-shell {
+  min-height: 100vh;
+  padding: 32px 16px 40px;
+}
+
+.dashboard {
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 20px 48px;
+  display: grid;
+  gap: 20px;
 }
 
 .hero {
   display: flex;
   justify-content: space-between;
+  align-items: flex-end;
   gap: 20px;
-  align-items: flex-start;
-  margin-bottom: 24px;
   padding: 28px;
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(157, 176, 208, 0.32);
+  box-shadow: 0 18px 48px rgba(82, 100, 128, 0.12);
 }
 
 .eyebrow {
-  margin: 0 0 10px;
-  color: #ef4444;
+  margin: 0 0 8px;
   font-size: 13px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
+  color: #577590;
 }
 
-.hero h1 {
+h1 {
   margin: 0;
-  font-size: 36px;
-  line-height: 1.15;
-  color: #111827;
+  font-size: 40px;
+  line-height: 1.1;
 }
 
-.subtitle {
-  margin: 12px 0 0;
+h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+}
+
+p {
+  margin: 0;
+  color: #5b6475;
+}
+
+.hero-text {
+  margin-top: 12px;
   max-width: 720px;
-  color: #4b5563;
   line-height: 1.7;
 }
 
-.refresh-btn,
-.trend-form button {
-  border: none;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
-  color: #fff;
-  cursor: pointer;
-  font-weight: 600;
+.hero-badge {
+  min-width: 260px;
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #274c77 0%, #3f72af 100%);
+  color: #ffffff;
 }
 
-.refresh-btn {
-  min-width: 120px;
-  padding: 14px 18px;
+.hero-badge span {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  opacity: 0.85;
 }
 
-.refresh-btn:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
+.hero-badge strong {
+  font-size: 18px;
+  line-height: 1.5;
 }
 
-.summary-grid {
+.cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
-  margin-bottom: 18px;
 }
 
-.summary-card,
+.card,
+.panel {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(157, 176, 208, 0.32);
+  box-shadow: 0 16px 38px rgba(82, 100, 128, 0.1);
+}
+
+.card {
+  padding: 20px;
+  border-radius: 20px;
+}
+
+.card span {
+  display: block;
+  margin-bottom: 14px;
+  color: #6b7280;
+}
+
+.card strong {
+  font-size: 28px;
+  color: #16324f;
+}
+
 .panel {
   padding: 22px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
-}
-
-.summary-card span {
-  display: block;
-  color: #6b7280;
-  font-size: 14px;
-}
-
-.summary-card strong {
-  display: block;
-  margin-top: 10px;
-  color: #111827;
-  font-size: 28px;
-}
-
-.message {
-  margin: 0 0 16px;
-  color: #b91c1c;
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: minmax(300px, 420px) 1fr;
-  gap: 18px;
+  border-radius: 24px;
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 18px;
 }
 
-.panel-header h2 {
-  margin: 0;
-  font-size: 22px;
-}
-
-.panel-header span {
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.empty-state {
-  color: #6b7280;
-  padding: 12px 0;
-}
-
-.ranking-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.search-box {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.ranking-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
-}
-
-.rank-meta {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-
-.rank-no {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: #ef4444;
-  color: #fff;
-  font-weight: 700;
-}
-
-.rank-title {
-  color: #111827;
-  word-break: break-all;
-}
-
-.hot-value {
-  color: #f97316;
-  font-weight: 700;
-}
-
-.trend-form {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.trend-form input {
-  flex: 1;
+.search-box input {
+  width: 260px;
   padding: 12px 14px;
-  border: 1px solid #d1d5db;
-  border-radius: 14px;
-  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #cdd7ea;
+  background: #ffffff;
   font-size: 14px;
 }
 
-.trend-form button {
-  padding: 12px 18px;
+.search-box button,
+.ghost-button {
+  padding: 12px 16px;
+  border: none;
+  border-radius: 12px;
+  background: #e4572e;
+  color: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.search-box button:disabled,
+.ghost-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.ghost-button {
+  background: #16324f;
+}
+
+.chart-panel {
+  min-height: 360px;
 }
 
 .chart {
   width: 100%;
-  height: 420px;
+  height: 360px;
+}
+
+.helper-text {
+  margin-top: 12px;
+  color: #4b5563;
+}
+
+.danger-text {
+  color: #b42318;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 20px;
+}
+
+.ranking-list {
+  display: grid;
+  gap: 10px;
+  max-height: 640px;
+  overflow: auto;
+}
+
+.ranking-item {
+  display: grid;
+  grid-template-columns: 64px 1fr 120px;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #e3eaf7;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
+  cursor: pointer;
+  text-align: left;
+}
+
+.ranking-item:hover {
+  border-color: #8aa4cf;
+  transform: translateY(-1px);
+}
+
+.rank-no {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: #16324f;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.rank-title {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.rank-hot {
+  text-align: right;
+  color: #e4572e;
+  font-weight: 700;
+}
+
+.trend-table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+}
+
+.trend-table th,
+.trend-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #edf2f7;
+  text-align: left;
+  font-size: 14px;
+}
+
+.trend-table th {
+  color: #475569;
+  font-weight: 600;
+}
+
+.table-empty,
+.empty-state {
+  text-align: center;
+  color: #6b7280;
+}
+
+.empty-state {
+  padding: 36px 12px;
 }
 
 @media (max-width: 960px) {
   .hero,
   .panel-header,
-  .trend-form,
   .content-grid {
-    display: block;
+    grid-template-columns: 1fr;
+    display: grid;
   }
 
-  .hero,
-  .summary-card,
-  .panel {
-    padding: 18px;
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .refresh-btn,
-  .trend-form button {
+  .search-box {
     width: 100%;
-    margin-top: 14px;
   }
 
-  .summary-grid,
-  .content-grid {
+  .search-box input {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-shell {
+    padding: 20px 12px 28px;
+  }
+
+  h1 {
+    font-size: 30px;
+  }
+
+  .cards {
     grid-template-columns: 1fr;
   }
 
-  .trend-form input {
-    width: 100%;
+  .ranking-item {
+    grid-template-columns: 56px 1fr;
+  }
+
+  .rank-hot {
+    grid-column: 2;
+    text-align: left;
   }
 
   .chart {
-    height: 320px;
+    height: 300px;
   }
 }
 </style>

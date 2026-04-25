@@ -1,24 +1,22 @@
-// 所有接口请求统一收口到这里，方便后续替换后端地址。
-import axios from "axios";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
-const request = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE || "",
-  timeout: 10000
-});
-
-export async function fetchSummary() {
-  const response = await request.get("/api/summary");
-  return response.data;
+async function request(path) {
+  const response = await fetch(`${API_BASE_URL}${path}`);
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "接口请求失败");
+  }
+  return response.json();
 }
 
-export async function fetchCurrentRanking() {
-  const response = await request.get("/api/ranking/current");
-  return response.data;
+export function getSummary() {
+  return request("/api/summary");
 }
 
-export async function fetchTrend(keyword) {
-  const response = await request.get("/api/trend", {
-    params: { keyword }
-  });
-  return response.data;
+export function getCurrentRanking() {
+  return request("/api/ranking/current");
+}
+
+export function getTrend(keyword) {
+  return request(`/api/trend?keyword=${encodeURIComponent(keyword)}`);
 }

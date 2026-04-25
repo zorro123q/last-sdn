@@ -1,154 +1,176 @@
-"""微博热搜 API 客户端。"""
+"""微博热搜接口请求与结果解析。"""
 
-import json
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 import requests
 
-from config import CollectorConfig
+from config import settings
 
 
-TITLE_KEYS: Sequence[str] = ("title", "word", "note", "desc", "query", "label_name")
-HOT_KEYS: Sequence[str] = ("hot_value", "hot", "raw_hot", "num", "score")
-RANK_KEYS: Sequence[str] = ("rank", "realpos", "position", "note_id")
-LIST_HINT_KEYS: Sequence[str] = ("data", "list", "items", "realtime", "band_list", "word_list", "hotgov")
+class WeiboApiClient:
+    """微博热搜接口客户端。"""
 
+    def __init__(self) -> None:
+        # 统一维护请求头，尽量降低因缺少头部导致的请求失败。
+        self.headers = {
+            "User-Agent": settings.collect_user_agent,
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://weibo.com/hot/search",
+        }
+        if settings.weibo_cookie:
+            self.headers["Cookie"] = settings.weibo_cookie
 
-def _pick_first_value(source: Dict[str, Any], keys: Sequence[str]) -> Any:
-    """按候选字段顺序取值。"""
+    def fetch_hot_search(self) -> list[dict[str, Any]]:
+        """拉取热搜接口并转换为统一字段。"""
+        response = requests.get(
+            settings.weibo_api_url,
+            headers=self.headers,
+            timeout=settings.weibo_api_timeout,
+        )
+        response.raise_for_status()
 
-    for key in keys:
-        value = source.get(key)
-        if value not in (None, "", []):
-            return value
-    return None
+        payload = response.json()
+        fetch_time = datetime.now()
+        items = self._normalize_records(payload, fetch_time)
 
+        if not items:
+            raise ValueError("接口请求成功，但未解析到热搜数据。")
 
-def _parse_hot_value(raw_value: Any) -> int:
-    """兼容处理整数、字符串以及带中文单位的热度值。"""
+        return items
 
-    if raw_value is None:
-        return 0
+    def _normalize_records(
+        self, payload: dict[str, Any], fetch_time: datetime
+    ) -> list[dict[str, Any]]:
+        """兼容不同返回结构，统一输出数据库需要的字段。"""
+        records: list[dict[str, Any]] = []
+        candidates = self._extract_candidate_list(payload)
 
-    if isinstance(raw_value, (int, float)):
-        return int(raw_value)
+        for index, item in enumerate(candidates, start=1):
+            if not isinstance(item, dict):
+                continue
+            if item.get("is_ad") or item.get("ad_info"):
+                continue
 
-    if isinstance(raw_value, dict):
-        nested_value = _pick_first_value(raw_value, HOT_KEYS)
-        return _parse_hot_value(nested_value)
+            title = self._pick_first_text(
+                item, ["title", "word", "note", "desc", "label_name"]
+            )
+            if not title:
+                continue
 
-    text = str(raw_value).strip().replace(",", "")
-    if not text:
-        return 0
+            rank_num = self._parse_rank_num(item, index)
+            hot_value = self._parse_hot_value(item)
+            source = self._pick_first_text(item, ["source"]) or settings.weibo_api_source
 
-    multiplier = 1
-    if "亿" in text:
-        multiplier = 100_000_000
-    elif "万" in text:
-        multiplier = 10_000
+            records.append(
+                {
+                    "title": title.strip(),
+                    "rank_num": rank_num,
+                    "hot_value": hot_value,
+                    "source": source,
+                    "fetch_time": fetch_time,
+                }
+            )
 
-    match = re.search(r"(\d+(?:\.\d+)?)", text)
-    if not match:
-        return 0
+        return records
 
-    return int(float(match.group(1)) * multiplier)
+    def _extract_candidate_list(self, payload: Any) -> list[dict[str, Any]]:
+        """优先匹配常见字段结构，找不到时再递归寻找候选列表。"""
+        if not isinstance(payload, dict):
+            return []
 
+        data = payload.get("data")
+        candidate_lists = [
+            payload.get("list"),
+            data if isinstance(data, list) else None,
+            data.get("list") if isinstance(data, dict) else None,
+            data.get("realtime") if isinstance(data, dict) else None,
+            data.get("band_list") if isinstance(data, dict) else None,
+            data.get("cards") if isinstance(data, dict) else None,
+        ]
 
-def _looks_like_hot_item(item: Any) -> bool:
-    """判断一条字典数据是否像热搜条目。"""
+        for candidate in candidate_lists:
+            if self._is_hot_list(candidate):
+                return candidate
 
-    return isinstance(item, dict) and any(key in item for key in TITLE_KEYS)
+        return self._find_hot_list(payload)
 
+    def _find_hot_list(self, node: Any) -> list[dict[str, Any]]:
+        """在未知结构中递归寻找最像热搜列表的节点。"""
+        if self._is_hot_list(node):
+            return node
 
-def _collect_candidate_lists(node: Any, candidates: List[Tuple[int, List[Dict[str, Any]]]]) -> None:
-    """递归扫描响应体，找到最可能的热搜列表。"""
+        if isinstance(node, dict):
+            for value in node.values():
+                result = self._find_hot_list(value)
+                if result:
+                    return result
 
-    if isinstance(node, list):
-        dict_items = [item for item in node if isinstance(item, dict)]
-        if dict_items:
-            score = sum(2 for item in dict_items[:10] if _looks_like_hot_item(item))
-            candidates.append((score, dict_items))
-        for item in node:
-            _collect_candidate_lists(item, candidates)
-        return
+        if isinstance(node, list):
+            for value in node:
+                result = self._find_hot_list(value)
+                if result:
+                    return result
 
-    if isinstance(node, dict):
-        for key in LIST_HINT_KEYS:
-            value = node.get(key)
-            if isinstance(value, list):
-                dict_items = [item for item in value if isinstance(item, dict)]
-                score = 5 + sum(2 for item in dict_items[:10] if _looks_like_hot_item(item))
-                candidates.append((score, dict_items))
-
-        for value in node.values():
-            _collect_candidate_lists(value, candidates)
-
-
-def _find_hot_list(payload: Any) -> List[Dict[str, Any]]:
-    """从不稳定的响应结构中提取热搜数组。"""
-
-    candidates: List[Tuple[int, List[Dict[str, Any]]]] = []
-    _collect_candidate_lists(payload, candidates)
-    candidates = [candidate for candidate in candidates if candidate[1]]
-
-    if not candidates:
         return []
 
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    return candidates[0][1]
+    def _is_hot_list(self, value: Any) -> bool:
+        """判断一个节点是否像热搜列表。"""
+        if not isinstance(value, list) or not value:
+            return False
+        if not all(isinstance(item, dict) for item in value):
+            return False
 
+        for item in value:
+            if self._pick_first_text(item, ["title", "word", "note", "desc"]):
+                return True
+        return False
 
-def _normalize_item(raw_item: Dict[str, Any], index: int, fetch_time: str, source_name: str) -> Optional[Dict[str, Any]]:
-    """把原始条目整理成统一结构。"""
+    def _pick_first_text(self, item: dict[str, Any], keys: list[str]) -> str:
+        """按顺序取第一个非空文本字段。"""
+        for key in keys:
+            value = item.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return ""
 
-    title = _pick_first_value(raw_item, TITLE_KEYS)
-    if title is None:
-        return None
+    def _parse_rank_num(self, item: dict[str, Any], fallback_rank: int) -> int:
+        """解析榜单排名，不存在时使用当前顺序作为默认值。"""
+        for key in ["rank_num", "rank", "realpos", "position", "display_rank"]:
+            value = self._to_int(item.get(key))
+            if value is not None:
+                return value
 
-    rank_value = _pick_first_value(raw_item, RANK_KEYS)
-    hot_value = _pick_first_value(raw_item, HOT_KEYS)
+        num_value = self._to_int(item.get("num"))
+        if num_value is not None and 1 <= num_value <= 200:
+            return num_value
 
-    return {
-        "rank": int(rank_value) if str(rank_value).isdigit() else index,
-        "title": str(title).strip(),
-        "hot_value": _parse_hot_value(hot_value),
-        "source": source_name,
-        "fetch_time": fetch_time,
-    }
+        return fallback_rank
 
+    def _parse_hot_value(self, item: dict[str, Any]) -> int:
+        """解析热度值，兼容 hot、hot_value、raw_hot 等字段。"""
+        for key in ["hot_value", "hot", "raw_hot", "score", "num", "number"]:
+            value = self._to_int(item.get(key))
+            if value is not None:
+                return value
+        return 0
 
-def fetch_hot_searches(config: CollectorConfig) -> Dict[str, Any]:
-    """请求微博热搜接口并返回标准化结果。"""
+    def _to_int(self, value: Any) -> int | None:
+        """将可能带中文或符号的值转换为整数。"""
+        if value is None or value == "":
+            return None
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
 
-    headers = {
-        "User-Agent": config.user_agent,
-        "Accept": "application/json, text/plain, */*",
-        "Referer": "https://s.weibo.com/top/summary",
-    }
-
-    response = requests.get(config.api_url, headers=headers, timeout=config.request_timeout)
-    response.raise_for_status()
-
-    try:
-        payload = response.json()
-    except json.JSONDecodeError:
-        payload = json.loads(response.text)
-
-    fetch_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    raw_items = _find_hot_list(payload)
-    items: List[Dict[str, Any]] = []
-
-    for index, raw_item in enumerate(raw_items, start=1):
-        normalized_item = _normalize_item(raw_item, index, fetch_time, config.source_name)
-        if normalized_item and normalized_item["title"]:
-            items.append(normalized_item)
-
-    if not items:
-        raise ValueError("未从微博接口响应中解析出热搜条目。")
-
-    return {
-        "fetch_time": fetch_time,
-        "items": items,
-    }
+        digits = re.sub(r"[^\d]", "", str(value))
+        if not digits:
+            return None
+        return int(digits)
