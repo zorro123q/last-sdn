@@ -12,6 +12,7 @@ from routes.ml_analysis import router as ml_analysis_router
 from routes.ranking import router as ranking_router
 from routes.summary import router as summary_router
 from routes.trend import router as trend_router
+from routes.sentiment_semantic import router as sentiment_semantic_router
 
 
 app = FastAPI(title="微博热搜分析系统", version="1.0.0")
@@ -31,6 +32,7 @@ app.include_router(summary_router)
 app.include_router(analysis_router)
 app.include_router(ml_analysis_router)
 app.include_router(ml_export_router)
+app.include_router(sentiment_semantic_router)
 
 
 @app.exception_handler(DatabaseConnectionError)

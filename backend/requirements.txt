@@ -7,3 +7,5 @@ scikit-learn
 jieba
 joblib
 openpyxl
+snownlp
+sentence-transformers
