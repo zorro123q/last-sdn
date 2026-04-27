@@ -1,0 +1,2 @@
+# 此目录用于存放 sentence-transformers 本地模型
+# 如果配置了 SEMANTIC_LOCAL_MODEL_PATH，模型将从这里加载

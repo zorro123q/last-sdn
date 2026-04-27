@@ -1,0 +1,19 @@
+[
+  "current_rank",
+  "current_hot_value",
+  "appear_count",
+  "max_hot_value",
+  "avg_hot_value",
+  "min_rank",
+  "best_rank",
+  "recent_avg_hot_value",
+  "recent_max_hot_value",
+  "hot_value_change",
+  "hot_value_change_rate",
+  "rank_change",
+  "duration_minutes",
+  "title_length",
+  "has_number",
+  "has_hashtag",
+  "fetch_hour"
+]

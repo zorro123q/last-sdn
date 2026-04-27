@@ -1,0 +1,798 @@
+下面是整理后的说明文档版本，可以直接替换为 `README.md` 使用。我主要调整了目录层级、启动顺序、命令格式、可选模块说明，并修复了原文中部分 Markdown 代码块未闭合的问题。整理依据来自你上传的原始 Markdown 文档。
+
+````markdown
+# 微博热搜分析系统说明文档
+
+## 一、项目简介
+
+本项目是一个适合毕业设计演示的微博热搜分析系统，完整链路如下：
+
+```text
+Python 定时采集 -> MySQL 数据库存储 -> FastAPI 后端接口 -> Vue3 + ECharts 前端可视化
+````
+
+项目核心目标是实现微博热搜数据的采集、存储、查询、趋势分析和前端可视化展示。
+
+当前项目基础版本主要包含以下能力：
+
+* 微博热搜数据定时采集
+* MySQL 数据库存储
+* FastAPI 后端接口服务
+* Vue3 前端可视化页面
+* ECharts 图表展示
+* 关键词趋势查询
+* 统计概览展示
+* PySpark 批处理分析
+* 机器学习爆发趋势识别
+* 外部历史数据导入
+
+---
+
+## 二、项目结构
+
+```text
+weibo-hot-project/
+├─ .env.example
+├─ README.md
+├─ collector/
+│  ├─ app.py
+│  ├─ api_client.py
+│  ├─ db_writer.py
+│  ├─ config.py
+│  └─ requirements.txt
+├─ backend/
+│  ├─ main.py
+│  ├─ config.py
+│  ├─ database.py
+│  ├─ requirements.txt
+│  ├─ routes/
+│  │  ├─ ranking.py
+│  │  ├─ trend.py
+│  │  └─ summary.py
+│  └─ services/
+│     └─ mysql_service.py
+├─ frontend/
+│  ├─ index.html
+│  ├─ package.json
+│  ├─ vite.config.js
+│  └─ src/
+│     ├─ main.js
+│     ├─ App.vue
+│     ├─ api/
+│     │  └─ index.js
+│     └─ views/
+│        └─ Dashboard.vue
+├─ analysis/
+│  ├─ batch_job.py
+│  ├─ requirements.txt
+│  └─ jars/
+│     └─ mysql-connector-j-8.4.0.jar
+├─ ml/
+│  └─ requirements.txt
+├─ external/
+│  └─ v5tech-weibo-trending-hot-search/
+├─ tools/
+│  └─ import_v5tech_weibo_dataset.py
+└─ sql/
+   ├─ init.sql
+   ├─ v3_stats.sql
+   ├─ v4_ml_analysis.sql
+   └─ v7_v5tech_external_history.sql
+```
+
+---
+
+## 三、环境要求
+
+建议使用以下环境：
+
+| 环境         | 版本要求          |
+| ---------- | ------------- |
+| Python     | 3.10+，推荐 3.11 |
+| MySQL      | 8.0+          |
+| Node.js    | 18+           |
+| npm        | 9+            |
+| Conda      | 推荐使用          |
+| PowerShell | Windows 环境推荐  |
+
+---
+
+## 四、初始化项目
+
+### 4.1 创建 Conda 环境
+
+在项目根目录执行：
+
+```powershell
+conda create -n sdn python=3.11
+conda activate sdn
+```
+
+---
+
+### 4.2 安装采集端依赖
+
+```powershell
+pip install -r collector\requirements.txt
+```
+
+---
+
+### 4.3 安装后端依赖
+
+```powershell
+pip install -r backend\requirements.txt
+```
+
+---
+
+### 4.4 安装前端依赖
+
+```powershell
+cd frontend
+npm install
+cd ..
+```
+
+---
+
+### 4.5 安装 PySpark 分析依赖
+
+```powershell
+cd analysis
+pip install -r requirements.txt
+cd ..
+```
+
+---
+
+### 4.6 安装机器学习模块依赖
+
+```powershell
+cd ml
+pip install -r requirements.txt
+cd ..
+```
+
+---
+
+## 五、初始化数据库
+
+### 5.1 创建数据库和基础表
+
+在项目根目录执行：
+
+```powershell
+cmd /c "mysql -u root -p < sql\init.sql"
+```
+
+执行后会创建基础数据库和核心数据表。
+
+---
+
+### 5.2 执行统计分析表结构
+
+```powershell
+cmd /c "mysql -u root -p weibo_hot < sql\v3_stats.sql"
+```
+
+---
+
+### 5.3 执行机器学习分析表结构
+
+```powershell
+cmd /c "mysql -u root -p weibo_hot < sql\v4_ml_analysis.sql"
+```
+
+---
+
+### 5.4 执行外部历史数据表结构
+
+```powershell
+cmd /c "mysql -u root -p weibo_hot < sql\v7_v5tech_external_history.sql"
+```
+
+---
+
+## 六、配置数据库连接
+
+采集端和后端都需要配置 MySQL 密码。
+
+### 6.1 修改采集端数据库配置
+
+打开文件：
+
+```text
+collector\config.py
+```
+
+检查或修改：
+
+```python
+mysql_password = os.getenv("MYSQL_PASSWORD", "123456")
+```
+
+其中 `"123456"` 修改为你自己的 MySQL 密码。
+
+---
+
+### 6.2 修改后端数据库配置
+
+打开文件：
+
+```text
+backend\config.py
+```
+
+检查或修改：
+
+```python
+mysql_password = os.getenv("MYSQL_PASSWORD", "123456")
+```
+
+其中 `"123456"` 修改为你自己的 MySQL 密码。
+
+---
+
+## 七、导入外部开源历史数据
+
+外部数据来源：
+
+```text
+https://github.com/v5tech/weibo-trending-hot-search
+```
+
+建议先导入一个月数据进行测试，不要一开始直接导入全部数据。
+
+---
+
+### 7.1 测试导入一个月数据
+
+在项目根目录执行：
+
+```powershell
+python tools/import_v5tech_weibo_dataset.py `
+  --dataset-dir external/v5tech-weibo-trending-hot-search `
+  --start-date 2021-11-08 `
+  --end-date 2021-11-30
+```
+
+---
+
+### 7.2 检查外部历史数据表
+
+进入 MySQL 后执行：
+
+```sql
+USE weibo_hot;
+
+SELECT COUNT(*) AS total_count
+FROM hot_search_v5tech_history;
+
+SELECT dataset_date, COUNT(*) AS cnt, MAX(hot_value) AS max_hot
+FROM hot_search_v5tech_history
+GROUP BY dataset_date
+ORDER BY dataset_date DESC
+LIMIT 10;
+```
+
+---
+
+### 7.3 同步导入到 hot_search_raw 表
+
+如果需要让现有页面、PySpark 分析、机器学习爆发趋势识别、情感分析和主题聚类直接使用外部历史数据，可以加上 `--sync-raw` 参数。
+
+```powershell
+python tools/import_v5tech_weibo_dataset.py `
+  --dataset-dir external/v5tech-weibo-trending-hot-search `
+  --start-date 2021-11-08 `
+  --end-date 2021-11-30 `
+  --sync-raw
+```
+
+---
+
+### 7.4 检查同步结果
+
+```sql
+USE weibo_hot;
+
+SELECT source, COUNT(*) AS total_count
+FROM hot_search_raw
+GROUP BY source;
+
+SELECT title, rank_num, hot_value, source, fetch_time
+FROM hot_search_raw
+WHERE source = 'v5tech_dataset'
+ORDER BY fetch_time DESC, rank_num ASC
+LIMIT 20;
+```
+
+---
+
+### 7.5 清理错误导入的数据
+
+清理外部历史表：
+
+```sql
+DELETE FROM hot_search_v5tech_history
+WHERE source = 'v5tech_dataset'
+  AND dataset_date BETWEEN '2021-11-08' AND '2021-11-30';
+```
+
+清理同步到 `hot_search_raw` 的数据：
+
+```sql
+DELETE FROM hot_search_raw
+WHERE source = 'v5tech_dataset'
+  AND DATE(fetch_time) BETWEEN '2021-11-08' AND '2021-11-30';
+```
+
+---
+
+### 7.6 自动清理后重新导入
+
+```powershell
+python tools/import_v5tech_weibo_dataset.py `
+  --dataset-dir external/v5tech-weibo-trending-hot-search `
+  --start-date 2021-11-08 `
+  --end-date 2021-11-30 `
+  --sync-raw `
+  --clear-range
+```
+
+---
+
+### 7.7 导入 2024 年数据
+
+测试没有问题后，可以导入 2024 年全年数据：
+
+```powershell
+python tools/import_v5tech_weibo_dataset.py `
+  --dataset-dir external/v5tech-weibo-trending-hot-search `
+  --start-date 2024-01-01 `
+  --end-date 2024-12-31 `
+  --sync-raw
+```
+
+---
+
+### 7.8 导入全部历史数据
+
+```powershell
+python tools/import_v5tech_weibo_dataset.py `
+  --dataset-dir external/v5tech-weibo-trending-hot-search `
+  --sync-raw
+```
+
+---
+
+## 八、配置并运行 PySpark 分析
+
+### 8.1 设置 MySQL JDBC 驱动路径
+
+注意：`SPARK_MYSQL_JAR` 的路径必须和你本地实际文件位置一致。
+
+示例路径：
+
+```text
+C:\Users\Administrator\Desktop\weibo1\weibo-hot-project\analysis\jars\mysql-connector-j-8.4.0.jar
+```
+
+在 PowerShell 中执行：
+
+```powershell
+setx SPARK_MYSQL_JAR "C:\Users\Administrator\Desktop\weibo1\weibo-hot-project\analysis\jars\mysql-connector-j-8.4.0.jar"
+```
+
+当前终端中也可以临时设置：
+
+```powershell
+$env:SPARK_MYSQL_JAR="C:\Users\Administrator\Desktop\weibo1\weibo-hot-project\analysis\jars\mysql-connector-j-8.4.0.jar"
+```
+
+检查路径是否正确：
+
+```powershell
+Test-Path $env:SPARK_MYSQL_JAR
+```
+
+如果返回：
+
+```text
+True
+```
+
+说明路径正确。
+
+---
+
+### 8.2 启动 PySpark 批处理任务
+
+在项目根目录执行：
+
+```powershell
+conda activate sdn
+python analysis/batch_job.py
+```
+
+---
+
+## 九、启动项目
+
+项目需要分别启动三个部分：
+
+1. 采集程序
+2. 后端服务
+3. 前端页面
+
+建议打开三个 PowerShell 终端分别运行。
+
+---
+
+### 9.1 启动采集程序
+
+新开一个终端：
+
+```powershell
+conda activate sdn
+cd collector
+python app.py
+```
+
+默认每 `300` 秒采集一次。
+
+注意：采集程序默认会持续运行，不会自动停止，需要手动按：
+
+```text
+Ctrl + C
+```
+
+停止程序。
+
+---
+
+### 9.2 只测试一次采集
+
+如果只想测试一次采集，可以执行：
+
+```powershell
+conda activate sdn
+cd collector
+$env:COLLECT_RUN_ONCE="true"
+python app.py
+```
+
+---
+
+### 9.3 启动后端服务
+
+新开一个终端，在项目根目录执行：
+
+```powershell
+conda activate sdn
+cd backend
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+启动成功后访问：
+
+```text
+http://127.0.0.1:8000/
+http://127.0.0.1:8000/docs
+```
+
+---
+
+### 9.4 启动前端页面
+
+新开一个终端，在项目根目录执行：
+
+```powershell
+cd frontend
+npm run dev
+```
+
+默认访问地址：
+
+```text
+http://127.0.0.1:5173
+```
+
+---
+
+## 十、接口说明
+
+### 10.1 获取当前热搜榜
+
+```http
+GET /api/ranking/current
+```
+
+作用：
+
+返回数据库中最新一次采集的微博热搜榜单数据。
+
+---
+
+### 10.2 获取关键词趋势
+
+```http
+GET /api/trend?keyword=高考
+```
+
+作用：
+
+根据关键词查询历史热度变化趋势。
+
+---
+
+### 10.3 获取统计概览
+
+```http
+GET /api/summary
+```
+
+作用：
+
+返回系统统计信息，包括：
+
+* 总记录数
+* 总采集批次
+* 关键词数量
+* 最新采集时间
+
+---
+
+## 十一、系统验证方式
+
+### 11.1 验证采集是否成功
+
+执行一次采集后，进入 MySQL：
+
+```sql
+USE weibo_hot;
+
+SELECT COUNT(*) AS total_records
+FROM hot_search_raw;
+
+SELECT *
+FROM hot_search_raw
+ORDER BY id DESC
+LIMIT 10;
+```
+
+如果能看到最新插入的字段，说明采集和入库正常：
+
+* `title`
+* `rank_num`
+* `hot_value`
+* `source`
+* `fetch_time`
+
+---
+
+### 11.2 验证后端接口
+
+在 PowerShell 中执行：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/summary
+Invoke-RestMethod http://127.0.0.1:8000/api/ranking/current
+Invoke-RestMethod "http://127.0.0.1:8000/api/trend?keyword=高考"
+```
+
+如果能返回 JSON 数据，说明后端接口正常。
+
+---
+
+### 11.3 验证前端页面
+
+打开：
+
+```text
+http://127.0.0.1:5173
+```
+
+确认以下内容是否正常显示：
+
+* 页面标题
+* 统计概览卡片
+* 当前热搜榜列表
+* 关键词搜索框
+* 关键词趋势折线图
+* 相关分析图表
+
+---
+
+## 十二、模块说明
+
+### 12.1 collector 采集模块
+
+`collector` 目录负责微博热搜数据采集。
+
+主要功能：
+
+* 使用 `requests` 请求微博热搜接口
+* 解析热搜标题、排名、热度值等字段
+* 将采集结果写入 MySQL
+* 支持定时采集
+* 支持单次采集测试
+* 支持通过环境变量调整采集间隔
+
+---
+
+### 12.2 backend 后端模块
+
+`backend` 目录负责提供 FastAPI 接口服务。
+
+主要功能：
+
+* 提供当前热搜榜接口
+* 提供关键词趋势接口
+* 提供统计概览接口
+* 开启 CORS，方便前端本地联调
+* 查询逻辑统一封装在 `services/mysql_service.py`
+
+---
+
+### 12.3 frontend 前端模块
+
+`frontend` 目录负责前端可视化页面。
+
+主要功能：
+
+* 使用 Vue3 + Vite 构建页面
+* 使用 ECharts 展示趋势图
+* 调用 FastAPI 后端接口
+* 展示热搜榜单、统计卡片、关键词趋势等内容
+
+---
+
+### 12.4 analysis 分析模块
+
+`analysis` 目录负责 PySpark 批处理分析。
+
+主要功能：
+
+* 从 MySQL 读取热搜数据
+* 进行批量统计分析
+* 生成热度变化、活跃时间等分析结果
+* 将分析结果写回 MySQL
+
+---
+
+### 12.5 ml 机器学习模块
+
+`ml` 目录负责机器学习相关分析。
+
+主要功能：
+
+* 热搜特征提取
+* 爆发趋势识别
+* 热度变化建模
+* 分析结果写入数据库
+* 供前端页面展示
+
+---
+
+## 十三、常见问题
+
+### 13.1 PowerShell 不支持 `<` 重定向怎么办？
+
+在 PowerShell 中直接执行：
+
+```powershell
+mysql -u root -p weibo_hot < sql\init.sql
+```
+
+可能会报错。
+
+推荐使用：
+
+```powershell
+cmd /c "mysql -u root -p weibo_hot < sql\init.sql"
+```
+
+---
+
+### 13.2 前端启动时报找不到 vite 怎么办？
+
+进入 `frontend` 目录重新安装依赖：
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+### 13.3 后端数据库连接失败怎么办？
+
+检查以下内容：
+
+1. MySQL 是否已启动
+2. 数据库 `weibo_hot` 是否存在
+3. `backend\config.py` 中的数据库密码是否正确
+4. 依赖是否安装完整
+
+---
+
+### 13.4 采集程序一直运行是否正常？
+
+正常。
+
+采集程序默认是定时采集任务，会每隔一段时间自动采集一次。
+
+停止方式：
+
+```text
+Ctrl + C
+```
+
+---
+
+### 13.5 PySpark 找不到 MySQL 驱动怎么办？
+
+检查环境变量：
+
+```powershell
+echo $env:SPARK_MYSQL_JAR
+Test-Path $env:SPARK_MYSQL_JAR
+```
+
+如果返回 `False`，说明路径错误，需要重新设置为真实存在的 jar 文件路径。
+
+---
+
+### 13.6 微博接口访问失败怎么办？
+
+可以尝试：
+
+1. 检查网络是否正常
+2. 在 `.env` 中配置 `WEIBO_COOKIE`
+3. 检查 `WEIBO_API_URL`
+4. 降低采集频率
+5. 先使用外部历史数据进行系统演示
+
+---
+
+## 十四、推荐启动顺序
+
+首次运行建议按照以下顺序：
+
+```text
+1. 创建 Conda 环境
+2. 安装 Python 依赖
+3. 安装前端依赖
+4. 初始化数据库
+5. 修改数据库密码配置
+6. 启动采集程序，确认数据入库
+7. 启动后端服务，确认接口返回 JSON
+8. 启动前端页面，确认图表展示正常
+9. 配置 PySpark
+10. 执行批处理分析
+11. 执行机器学习分析
+12. 导入外部历史数据进行扩展演示
+```
+
+---
+
+## 十五、毕业设计演示建议
+
+演示时可以按照以下流程讲解：
+
+```text
+1. 介绍系统背景：微博热搜数据具有实时性和舆情分析价值
+2. 介绍系统架构：采集层、存储层、服务层、展示层、分析层
+3. 展示数据采集：Python 定时采集微博热搜
+4. 展示数据库：MySQL 保存原始热搜数据
+5. 展示接口：FastAPI 提供排行榜、趋势、概览接口
+6. 展示前端：Vue3 + ECharts 可视化热搜数据
+7. 展示分析：PySpark 批处理和机器学习爆发趋势识别
+8. 总结系统价值：可用于热点监测、趋势分析和舆情辅助判断
+```
+
+```
+```
