@@ -5,9 +5,10 @@
       <div class="nav-inner">
         <!-- Logo 区域 -->
         <div class="nav-brand">
-          <span class="brand-icon">🔥</span>
-          <span class="brand-name">微博热搜分析系统</span>
-          <span class="brand-tag">毕业设计</span>
+          <svg class="brand-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+          <span class="brand-name">微博热搜舆情智能分析平台</span>
         </div>
 
         <!-- 导航菜单 -->
@@ -19,7 +20,6 @@
             class="nav-item"
             active-class="nav-item--active"
           >
-            <span class="nav-icon">{{ item.icon }}</span>
             <span class="nav-label">{{ item.label }}</span>
           </router-link>
         </nav>
@@ -27,12 +27,16 @@
         <!-- 右侧操作区 -->
         <div class="nav-right">
           <router-link to="/bigscreen" class="bigscreen-btn" title="进入可视化大屏">
-            <span>📺</span>
+            <svg class="btn-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
             <span>大屏模式</span>
           </router-link>
           <div class="live-dot">
             <span class="dot-pulse"></span>
-            <span class="dot-label">实时数据</span>
+            <span class="dot-label">实时运行中</span>
           </div>
         </div>
       </div>
@@ -40,7 +44,13 @@
 
     <!-- 大屏模式返回按钮 -->
     <div v-if="isBigScreen" class="bigscreen-back">
-      <router-link to="/dashboard" class="back-btn">← 返回普通模式</router-link>
+      <router-link to="/dashboard" class="back-btn">
+        <svg class="back-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        返回普通模式
+      </router-link>
       <span class="bigscreen-time">{{ currentTime }}</span>
     </div>
 
@@ -65,11 +75,16 @@ const currentTime = ref("");
 const isBigScreen = computed(() => route.path === "/bigscreen");
 
 const navItems = [
-  { path: "/dashboard", label: "实时总览", icon: "📊" },
-  { path: "/analysis", label: "PySpark 分析", icon: "⚡" },
-  { path: "/burst", label: "ML 爆发趋势", icon: "🚀" },
-  { path: "/sentiment", label: "评论情感分析", icon: "🌍" },
-  { path: "/sentiment-analysis", label: "情感语义分析", icon: "💡" },
+  { path: "/dashboard", label: "实时总览" },
+  { path: "/analysis", label: "PySpark 分析" },
+  { path: "/burst", label: "ML 爆发趋势" },
+  { path: "/sentiment", label: "评论情感分析" },
+  { path: "/sentiment-analysis", label: "情感语义分析" },
+  { path: "/lifecycle", label: "生命周期" },
+  { path: "/alerts", label: "预警中心" },
+  { path: "/ai-report", label: "AI 日报" },
+  { path: "/jobs", label: "任务中心" },
+  { path: "/health", label: "系统监控" },
 ];
 
 let timer = null;
@@ -99,18 +114,23 @@ onBeforeUnmount(() => {
 <style>
 /* ===================== 全局重置与基础变量 ===================== */
 :root {
-  --primary: #e4572e;
-  --primary-dark: #c23d1a;
-  --accent: #2a9d8f;
-  --navy: #16324f;
-  --navy-mid: #274c77;
-  --text-base: #1f2937;
-  --text-muted: #5b6475;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --primary-light: #3b82f6;
+  --accent: #06b6d4;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --navy: #0f172a;
+  --navy-mid: #1e293b;
+  --text-base: #1e293b;
+  --text-muted: #64748b;
   --text-light: #94a3b8;
-  --bg-glass: rgba(255, 255, 255, 0.88);
-  --border-light: rgba(157, 176, 208, 0.32);
-  --shadow-card: 0 16px 38px rgba(82, 100, 128, 0.1);
-  --shadow-hero: 0 18px 48px rgba(82, 100, 128, 0.12);
+  --bg-glass: rgba(255, 255, 255, 0.92);
+  --border-light: rgba(148, 163, 184, 0.25);
+  --shadow-card: 0 8px 32px rgba(15, 23, 42, 0.08);
+  --shadow-hero: 0 12px 40px rgba(15, 23, 42, 0.1);
+  --shadow-nav: 0 2px 20px rgba(15, 23, 42, 0.06);
   --radius-card: 20px;
   --radius-btn: 12px;
   --nav-height: 64px;
@@ -125,9 +145,7 @@ onBeforeUnmount(() => {
 
 body {
   font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  background: radial-gradient(circle at 15% 5%, rgba(69, 123, 157, 0.22), transparent 30%),
-    radial-gradient(circle at 85% 90%, rgba(228, 87, 46, 0.1), transparent 30%),
-    linear-gradient(145deg, #eef4ff 0%, #f5f8fc 50%, #fff8f5 100%);
+  background: linear-gradient(180deg, #f0f5ff 0%, #f8fafc 50%, #f1f5f9 100%);
   min-height: 100vh;
   color: var(--text-base);
   overflow-x: hidden;
@@ -142,11 +160,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(157, 176, 208, 0.5);
+  background: rgba(148, 163, 184, 0.5);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(87, 117, 144, 0.6);
+  background: rgba(100, 116, 139, 0.6);
 }
 </style>
 
@@ -168,17 +186,18 @@ body {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border-light);
-  box-shadow: 0 2px 20px rgba(82, 100, 128, 0.08);
+  box-shadow: var(--shadow-nav);
 }
 
 .nav-inner {
-  max-width: 1440px;
+  max-width: 1680px;
   margin: 0 auto;
   height: 100%;
-  padding: 0 24px;
+  padding: 0 18px;
   display: flex;
   align-items: center;
-  gap: 32px;
+  justify-content: space-between;
+  gap: 18px;
 }
 
 /* Brand */
@@ -190,9 +209,11 @@ body {
   flex-shrink: 0;
 }
 
-.brand-icon {
-  font-size: 22px;
-  filter: drop-shadow(0 2px 4px rgba(228, 87, 46, 0.35));
+.brand-icon-svg {
+  width: 22px;
+  height: 22px;
+  color: var(--primary);
+  flex-shrink: 0;
 }
 
 .brand-name {
@@ -200,16 +221,7 @@ body {
   font-weight: 700;
   color: var(--navy);
   letter-spacing: 0.02em;
-}
-
-.brand-tag {
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, var(--primary), #f4723e);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 /* 导航菜单 */
@@ -218,13 +230,20 @@ body {
   align-items: center;
   gap: 4px;
   flex: 1;
+  justify-content: flex-start;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nav-menu::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 8px 12px;
   border-radius: var(--radius-btn);
   text-decoration: none;
   color: var(--text-muted);
@@ -232,15 +251,16 @@ body {
   font-weight: 500;
   transition: all var(--transition);
   position: relative;
+  white-space: nowrap;
 }
 
 .nav-item:hover {
-  background: rgba(228, 87, 46, 0.06);
+  background: rgba(37, 99, 235, 0.06);
   color: var(--primary);
 }
 
 .nav-item--active {
-  background: rgba(228, 87, 46, 0.1);
+  background: rgba(37, 99, 235, 0.1);
   color: var(--primary);
   font-weight: 600;
 }
@@ -257,16 +277,11 @@ body {
   transform: translateY(1px);
 }
 
-.nav-icon {
-  font-size: 16px;
-}
-
 /* 右侧 */
 .nav-right {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-left: auto;
   flex-shrink: 0;
 }
 
@@ -282,12 +297,18 @@ body {
   font-size: 13px;
   font-weight: 600;
   transition: all var(--transition);
-  box-shadow: 0 4px 12px rgba(22, 50, 79, 0.3);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.3);
 }
 
 .bigscreen-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(22, 50, 79, 0.36);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.36);
+}
+
+.btn-icon-svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .live-dot {
@@ -300,7 +321,7 @@ body {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #22c55e;
+  background: var(--success);
   box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
   animation: pulse-ring 1.8s ease-out infinite;
 }
@@ -321,6 +342,7 @@ body {
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 500;
+  white-space: nowrap;
 }
 
 /* ===================== 大屏模式 ===================== */
@@ -341,9 +363,10 @@ body {
 .back-btn {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding: 7px 14px;
   border-radius: 10px;
-  background: rgba(22, 50, 79, 0.75);
+  background: rgba(15, 23, 42, 0.75);
   backdrop-filter: blur(8px);
   color: rgba(255, 255, 255, 0.9);
   text-decoration: none;
@@ -354,7 +377,13 @@ body {
 }
 
 .back-btn:hover {
-  background: rgba(22, 50, 79, 0.9);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.back-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .bigscreen-time {
@@ -395,7 +424,7 @@ body {
 @media (max-width: 768px) {
   .nav-inner {
     padding: 0 16px;
-    gap: 16px;
+    gap: 12px;
   }
 
   .brand-name {
@@ -411,11 +440,8 @@ body {
   }
 
   .nav-item {
-    padding: 8px 12px;
-  }
-
-  .nav-label {
-    display: none;
+    padding: 8px 10px;
+    font-size: 13px;
   }
 }
 </style>

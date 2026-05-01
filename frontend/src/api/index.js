@@ -84,6 +84,10 @@ export function runAnalysisJob() {
   return request("/api/analysis/run", { method: "POST" });
 }
 
+export function runCollectorJob() {
+  return request("/api/collector/run", { method: "POST" });
+}
+
 export function getBurstTop(limit = 20) {
   return request(`/api/ml/burst/top?limit=${encodeURIComponent(limit)}`);
 }
@@ -175,6 +179,42 @@ export function getSemanticClusterSummary() {
 }
 
 /**
+ * 获取增强报告关键表数据量
+ */
+export function getReportDebugCounts() {
+  return request("/api/report/debug-counts");
+}
+
+/* ===== 可视化增强 API ===== */
+
+export function getHourlyHeatmap() {
+  return request("/api/visual/hourly-heatmap");
+}
+
+/**
+ * 热搜活跃时间热力图（/api/analysis/ 路径别名，与 getHourlyHeatmap 等价）
+ */
+export function getAnalysisHourlyHeatmap() {
+  return request("/api/analysis/hourly-heatmap");
+}
+
+export function getRankMovers() {
+  return request("/api/visual/rank-movers");
+}
+
+export function getVisualInsights() {
+  return request("/api/visual/insights");
+}
+
+/**
+ * 根据关键词查询爆发趋势识别结果（/api/analysis/ 路径版本）
+ * @param {string} keyword - 搜索关键词
+ */
+export function getBurstByKeyword(keyword) {
+  return request(`/api/analysis/burst/keyword?keyword=${encodeURIComponent(keyword)}`);
+}
+
+/**
  * 手动触发语义聚类任务
  */
 export function runSemanticClusterJob() {
@@ -193,6 +233,79 @@ export function exportEnhancedReportCsv() {
  */
 export function exportEnhancedReportExcel() {
   return downloadFile("/api/export/enhanced_report.xlsx");
+}
+
+/* ===== 第六期智能分析与预警增强 API ===== */
+
+export function getLifecycleSummary() {
+  return request("/api/v6/lifecycle/summary");
+}
+
+export function getLifecycleList(stage = "", limit = 100) {
+  const params = new URLSearchParams();
+  if (stage) params.set("stage", stage);
+  params.set("limit", String(limit));
+  return request(`/api/v6/lifecycle/list?${params.toString()}`);
+}
+
+export function runLifecycleJob() {
+  return request("/api/v6/lifecycle/run", { method: "POST" });
+}
+
+export function getAlertSummary() {
+  return request("/api/v6/alerts/summary");
+}
+
+export function getAlertList(level = "", type = "", limit = 100) {
+  const params = new URLSearchParams();
+  if (level) params.set("level", level);
+  if (type) params.set("type", type);
+  params.set("limit", String(limit));
+  return request(`/api/v6/alerts/list?${params.toString()}`);
+}
+
+export function runAlertJob() {
+  return request("/api/v6/alerts/run", { method: "POST" });
+}
+
+export function markAlertRead(alertId) {
+  return request(`/api/v6/alerts/${encodeURIComponent(alertId)}/read`, { method: "POST" });
+}
+
+export function getLatestAiReport() {
+  return request("/api/v6/reports/latest");
+}
+
+export function getAiReportList() {
+  return request("/api/v6/reports/list");
+}
+
+export function getAiReportDetail(reportId) {
+  return request(`/api/v6/reports/${encodeURIComponent(reportId)}`);
+}
+
+export function runAiReportJob() {
+  return request("/api/v6/reports/run", { method: "POST" });
+}
+
+export function getJobList() {
+  return request("/api/v6/jobs");
+}
+
+export function getJobDetail(jobId) {
+  return request(`/api/v6/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export function runAllJobs() {
+  return request("/api/v6/jobs/run-all", { method: "POST" });
+}
+
+export function getSystemHealthSummary() {
+  return request("/api/v6/health/summary");
+}
+
+export function runSystemHealthCheck() {
+  return request("/api/v6/health/run", { method: "POST" });
 }
 
 /* ===== 评论地理分布（省份热力数据） ===== */
