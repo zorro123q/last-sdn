@@ -110,7 +110,8 @@ def get_sentiment_summary():
         cursor.execute(sql)
         result = cursor.fetchone()
 
-        if result is None:
+        if result is None or not result.get("total_count"):
+            print("[report] hot_search_sentiment_stats 为空，情感汇总无数据")
             return {
                 "avg_sentiment_score": 0.5,
                 "positive_count": 0,
@@ -172,6 +173,8 @@ def get_sentiment_daily():
         """
         cursor.execute(sql)
         results = _query_to_dict_list(cursor)
+        if not results:
+            print("[report] hot_search_sentiment_daily_stats 为空，每日情绪无数据")
         return results
 
     except pymysql.MySQLError as e:
@@ -237,6 +240,8 @@ def get_sentiment_top(limit: int = 20, label: Optional[str] = None):
             cursor.execute(sql, (limit,))
 
         results = _query_to_dict_list(cursor)
+        if not results:
+            print("[report] hot_search_sentiment_stats 为空，情感明细无数据")
         return results
 
     except pymysql.MySQLError as e:
@@ -310,12 +315,16 @@ def get_semantic_clusters():
                 semantic_keywords,
                 embedding_method,
                 hot_value,
-                rank_num
+                rank_num,
+                cluster_date,
+                created_at
             FROM hot_search_semantic_clusters
             ORDER BY cluster_id ASC, hot_value DESC
         """
         cursor.execute(sql)
         results = _query_to_dict_list(cursor)
+        if not results:
+            print("[report] 语义聚类结果为空，请先运行 python semantic/semantic_cluster_job.py")
         return results
 
     except pymysql.MySQLError as e:
@@ -351,6 +360,8 @@ def get_semantic_cluster_summary():
         """
         cursor.execute(sql)
         results = _query_to_dict_list(cursor)
+        if not results:
+            print("[report] 语义聚类主题分布为空，请先运行 python semantic/semantic_cluster_job.py")
 
         # 处理数值
         for row in results:
@@ -439,17 +450,28 @@ def _get_keyword_stats():
         conn = _get_connection()
         cursor = conn.cursor()
 
+        # 使用 best_rank AS min_rank_num 确保报告字段名一致
         sql = """
-            SELECT keyword, appear_count, max_hot_value, min_rank_num
+            SELECT
+                keyword,
+                appear_count,
+                max_hot_value,
+                best_rank AS min_rank_num
             FROM hot_search_keyword_stats
-            ORDER BY appear_count DESC
+            ORDER BY appear_count DESC, max_hot_value DESC
             LIMIT 100
         """
         cursor.execute(sql)
         results = _query_to_dict_list(cursor)
+        if not results:
+            print("[report] hot_search_keyword_stats 为空，关键词统计无数据")
         return results
-    except Exception:
+    except Exception as e:
+        print(f"[report] 获取关键词统计失败：{e}")
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 def _get_daily_stats():
@@ -459,16 +481,29 @@ def _get_daily_stats():
         conn = _get_connection()
         cursor = conn.cursor()
 
+        # 真实表字段：total_records / total_keywords / min_rank（无 created_at / keyword_count / total_count）
         sql = """
-            SELECT stat_date, total_count, keyword_count, avg_hot_value
+            SELECT
+                stat_date,
+                total_records AS total_count,
+                total_keywords AS keyword_count,
+                avg_hot_value,
+                max_hot_value,
+                min_rank
             FROM hot_search_daily_stats
             ORDER BY stat_date ASC
         """
         cursor.execute(sql)
         results = _query_to_dict_list(cursor)
+        if not results:
+            print("[report] hot_search_daily_stats 为空，每日统计无数据")
         return results
-    except Exception:
+    except Exception as e:
+        print(f"[report] 获取每日统计失败：{e}")
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 def _get_burst_predictions():
@@ -478,17 +513,35 @@ def _get_burst_predictions():
         conn = _get_connection()
         cursor = conn.cursor()
 
+        # 使用 SQL CASE 表达式在数据库层生成 burst_label，避免 Python 端循环
         sql = """
-            SELECT keyword, burst_probability, burst_label, trend_direction, current_hot_value
+            SELECT
+                keyword,
+                burst_probability,
+                burst_level,
+                CASE burst_level
+                    WHEN 2 THEN '爆发型'
+                    WHEN 1 THEN '稳定型'
+                    WHEN 0 THEN '降温型'
+                    ELSE '稳定型'
+                END AS burst_label,
+                trend_direction,
+                current_hot_value
             FROM hot_search_burst_predictions
-            ORDER BY burst_probability DESC
+            ORDER BY burst_probability DESC, current_hot_value DESC
             LIMIT 100
         """
         cursor.execute(sql)
         results = _query_to_dict_list(cursor)
+        if not results:
+            print("[report] hot_search_burst_predictions 为空，爆发趋势无数据")
         return results
-    except Exception:
+    except Exception as e:
+        print(f"[report] 获取爆发趋势失败：{e}")
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 def _get_topic_clusters():
@@ -499,15 +552,30 @@ def _get_topic_clusters():
         cursor = conn.cursor()
 
         sql = """
-            SELECT keyword, cluster_id, cluster_name, tfidf_keywords, hot_value
+            SELECT
+                keyword,
+                cluster_id,
+                cluster_name,
+                tfidf_keywords,
+                hot_value,
+                rank_num,
+                cluster_date,
+                created_at
             FROM hot_search_topic_clusters
             ORDER BY cluster_id ASC, hot_value DESC
+            LIMIT 200
         """
         cursor.execute(sql)
         results = _query_to_dict_list(cursor)
+        if not results:
+            print("[report] hot_search_topic_clusters 为空，TF-IDF 主题聚类无数据")
         return results
-    except Exception:
+    except Exception as e:
+        print(f"[report] 获取主题聚类失败：{e}")
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 def _get_current_ranking():
@@ -518,7 +586,12 @@ def _get_current_ranking():
         cursor = conn.cursor()
 
         sql = """
-            SELECT title, rank_num, hot_value, source
+            SELECT
+                title,
+                rank_num,
+                hot_value,
+                source,
+                fetch_time
             FROM hot_search_raw
             WHERE fetch_time = (SELECT MAX(fetch_time) FROM hot_search_raw)
             ORDER BY rank_num ASC
@@ -526,9 +599,68 @@ def _get_current_ranking():
         """
         cursor.execute(sql)
         results = _query_to_dict_list(cursor)
+        if not results:
+            print("[report] hot_search_raw 为空，当前热搜榜无数据")
         return results
-    except Exception:
+    except Exception as e:
+        print(f"[report] 获取当前热搜榜失败：{e}")
         return []
+    finally:
+        if conn:
+            conn.close()
+
+
+def _get_burst_label(burst_level):
+    """根据 burst_level 生成中文爆发标签。"""
+    try:
+        level = int(burst_level)
+    except (TypeError, ValueError):
+        level = 0
+    if level == 3:
+        return "高爆发"
+    if level == 2:
+        return "中爆发"
+    return "低爆发"
+
+
+def get_report_debug_counts():
+    """获取增强报告相关关键表的数据量。"""
+    tables = [
+        "hot_search_raw",
+        "hot_search_keyword_stats",
+        "hot_search_daily_stats",
+        "hot_search_feature_stats",
+        "hot_search_burst_predictions",
+        "hot_search_topic_clusters",
+        "hot_search_sentiment_stats",
+        "hot_search_sentiment_daily_stats",
+        "hot_search_semantic_clusters",
+    ]
+    counts = {}
+    conn = None
+    try:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        for table in tables:
+            try:
+                cursor.execute(f"SELECT COUNT(*) AS count FROM {table}")
+                row = cursor.fetchone() or {}
+                counts[table] = int(row.get("count") or 0)
+                if counts[table] == 0:
+                    if table == "hot_search_semantic_clusters":
+                        print("[report] 语义聚类结果为空，请先运行 python semantic/semantic_cluster_job.py")
+                    else:
+                        print(f"[report] {table} 为空")
+            except Exception as e:
+                counts[table] = None
+                print(f"[report] 获取 {table} 数据量失败：{e}")
+        return counts
+    except Exception as e:
+        print(f"[report] 获取调试表数据量失败：{e}")
+        return {table: None for table in tables}
+    finally:
+        if conn:
+            conn.close()
 
 
 def export_enhanced_report_csv():
@@ -575,6 +707,16 @@ def export_enhanced_report_csv():
                         f"{row.get('total_count', 0)},{row.get('positive_ratio', 0)},{row.get('neutral_ratio', 0)},{row.get('negative_ratio', 0)}\n")
         output.write("\n")
 
+        # 每日热搜统计
+        output.write("=== 每日热搜统计 ===\n")
+        output.write("日期,总记录数,关键词数,平均热度,最高热度,最佳排名,创建时间\n")
+        for row in daily_stats:
+            output.write(f"{row.get('stat_date', '')},{row.get('total_records', 0)},"
+                        f"{row.get('total_keywords', 0)},{row.get('avg_hot_value', 0)},"
+                        f"{row.get('max_hot_value', 0)},{row.get('min_rank', '')},"
+                        f"{row.get('created_at', '')}\n")
+        output.write("\n")
+
         # 情感分析 Top100
         output.write("=== 情感分析 Top100 ===\n")
         output.write("关键词,情感分数,情感标签,排名,热度值\n")
@@ -594,34 +736,41 @@ def export_enhanced_report_csv():
 
         # 爆发趋势识别
         output.write("=== 爆发趋势识别 Top100 ===\n")
-        output.write("关键词,爆发概率,爆发类型,趋势方向,当前热度值\n")
+        output.write("关键词,爆发等级,爆发类型,爆发概率,趋势方向,当前排名,当前热度值,热度变化率,排名变化,出现次数,模型名称,预测日期,创建时间\n")
         for row in burst_predictions:
-            output.write(f"{row.get('keyword', '')},{row.get('burst_probability', 0)},"
-                        f"{row.get('burst_label', '')},{row.get('trend_direction', '')},{row.get('current_hot_value', 0)}\n")
+            output.write(f"{row.get('keyword', '')},{row.get('burst_level', '')},"
+                        f"{row.get('burst_label', '')},{row.get('burst_probability', 0)},"
+                        f"{row.get('trend_direction', '')},{row.get('current_rank', '')},"
+                        f"{row.get('current_hot_value', 0)},{row.get('hot_value_change_rate', 0)},"
+                        f"{row.get('rank_change', 0)},{row.get('appear_count', 0)},"
+                        f"{row.get('model_name', '')},{row.get('predict_date', '')},{row.get('created_at', '')}\n")
         output.write("\n")
 
         # 主题聚类
         output.write("=== TF-IDF主题聚类 ===\n")
-        output.write("关键词,聚类ID,主题类别,TF-IDF关键词,热度值\n")
+        output.write("关键词,聚类ID,主题类别,TF-IDF关键词,热度值,排名,聚类日期,创建时间\n")
         for row in topic_clusters:
             output.write(f"{row.get('keyword', '')},{row.get('cluster_id', '')},{row.get('cluster_name', '')},"
-                        f"{row.get('tfidf_keywords', '')},{row.get('hot_value', 0)}\n")
+                        f"{row.get('tfidf_keywords', '')},{row.get('hot_value', 0)},"
+                        f"{row.get('rank_num', '')},{row.get('cluster_date', '')},{row.get('created_at', '')}\n")
         output.write("\n")
 
         # 关键词统计
         output.write("=== 关键词统计 Top100 ===\n")
-        output.write("关键词,出现次数,最高热度,最佳排名\n")
+        output.write("关键词,出现次数,最高热度,平均热度,最佳排名,最新采集时间,统计日期\n")
         for row in keyword_stats:
             output.write(f"{row.get('keyword', '')},{row.get('appear_count', 0)},"
-                        f"{row.get('max_hot_value', 0)},{row.get('min_rank_num', '')}\n")
+                        f"{row.get('max_hot_value', 0)},{row.get('avg_hot_value', 0)},"
+                        f"{row.get('best_rank', '')},{row.get('latest_fetch_time', '')},"
+                        f"{row.get('stat_date', '')}\n")
         output.write("\n")
 
         # 当前热搜榜
         output.write("=== 当前热搜榜 ===\n")
-        output.write("标题,排名,热度值,来源\n")
+        output.write("标题,排名,热度值,来源,采集时间\n")
         for row in current_ranking:
             output.write(f"{row.get('title', '')},{row.get('rank_num', '')},"
-                        f"{row.get('hot_value', 0)},{row.get('source', '')}\n")
+                        f"{row.get('hot_value', 0)},{row.get('source', '')},{row.get('fetch_time', '')}\n")
 
         csv_content = output.getvalue()
         output.close()
@@ -690,6 +839,20 @@ def export_enhanced_report_excel():
                 row.get("negative_ratio", 0),
             ])
 
+        # Sheet: 每日统计
+        ws_daily = wb.create_sheet("每日统计")
+        ws_daily.append(["日期", "总记录数", "关键词数", "平均热度", "最高热度", "最佳排名", "创建时间"])
+        for row in daily_stats:
+            ws_daily.append([
+                row.get("stat_date", ""),
+                row.get("total_records", 0),
+                row.get("total_keywords", 0),
+                row.get("avg_hot_value", 0),
+                row.get("max_hot_value", 0),
+                row.get("min_rank", ""),
+                row.get("created_at", ""),
+            ])
+
         # Sheet3: 情感明细
         ws3 = wb.create_sheet("情感明细")
         ws3.append(["关键词", "情感分数", "情感标签", "排名", "热度值"])
@@ -727,38 +890,61 @@ def export_enhanced_report_excel():
                 row.get("max_hot_value", 0),
             ])
 
+        # Sheet: TF-IDF主题聚类
+        ws_topic = wb.create_sheet("TF-IDF主题聚类")
+        ws_topic.append(["关键词", "聚类ID", "主题类别", "TF-IDF关键词", "热度值", "排名", "聚类日期", "创建时间"])
+        for row in topic_clusters:
+            ws_topic.append([
+                row.get("keyword", ""),
+                row.get("cluster_id", ""),
+                row.get("cluster_name", ""),
+                row.get("tfidf_keywords", ""),
+                row.get("hot_value", 0),
+                row.get("rank_num", ""),
+                row.get("cluster_date", ""),
+                row.get("created_at", ""),
+            ])
+
         # Sheet6: 爆发趋势
         ws6 = wb.create_sheet("爆发趋势")
-        ws6.append(["关键词", "爆发概率", "爆发类型", "趋势方向", "当前热度值"])
+        ws6.append(["关键词", "爆发等级", "爆发类型", "爆发概率", "趋势方向", "当前排名", "当前热度值", "热度变化率", "排名变化"])
         for row in burst_predictions:
             ws6.append([
                 row.get("keyword", ""),
-                row.get("burst_probability", 0),
+                row.get("burst_level", ""),
                 row.get("burst_label", ""),
+                row.get("burst_probability", 0),
                 row.get("trend_direction", ""),
+                row.get("current_rank", ""),
                 row.get("current_hot_value", 0),
+                row.get("hot_value_change_rate", 0),
+                row.get("rank_change", 0),
             ])
 
         # Sheet7: 关键词统计
         ws7 = wb.create_sheet("关键词统计")
-        ws7.append(["关键词", "出现次数", "最高热度", "最佳排名"])
+        ws7.append(["关键词", "出现次数", "最高热度", "平均热度", "最佳排名", "最新采集时间", "统计日期"])
         for row in keyword_stats:
             ws7.append([
                 row.get("keyword", ""),
                 row.get("appear_count", 0),
                 row.get("max_hot_value", 0),
-                row.get("min_rank_num", ""),
+                row.get("avg_hot_value", 0),
+                row.get("best_rank", ""),
+                row.get("latest_fetch_time", ""),
+                row.get("stat_date", ""),
             ])
 
         # Sheet8: 当前热搜
         ws8 = wb.create_sheet("当前热搜")
-        ws8.append(["标题", "排名", "热度值", "来源"])
+        ws8.append(["标题", "排名", "热度值", "来源", "采集时间"])
         for row in current_ranking:
             ws8.append([
                 row.get("title", ""),
                 row.get("rank_num", ""),
                 row.get("hot_value", 0),
                 row.get("source", ""),
+                row.get("fetch_time", ""),
             ])
 
         # 保存文件

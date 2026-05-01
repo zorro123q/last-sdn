@@ -23,10 +23,16 @@ def get_burst_top(limit: int = Query(20, ge=1, le=100)) -> dict:
 @router.get("/burst/search")
 def search_burst_keyword(keyword: str = Query(..., description="查询关键词")) -> dict:
     """根据关键词查询爆发趋势识别结果。"""
-    if not keyword.strip():
+    cleaned = keyword.strip()
+    if not cleaned:
         raise HTTPException(status_code=400, detail="关键词不能为空")
-    items = ml_analysis_service.get_burst_by_keyword(keyword)
-    return {"count": len(items), "items": items}
+    items = ml_analysis_service.get_burst_by_keyword(cleaned)
+    return {
+        "keyword": cleaned,
+        "count": len(items),
+        "total": len(items),
+        "items": items,
+    }
 
 
 @router.get("/topics")

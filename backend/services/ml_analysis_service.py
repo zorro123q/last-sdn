@@ -49,28 +49,34 @@ class MLAnalysisService:
         return self._fetch_all(sql, (safe_limit,))
 
     def get_burst_by_keyword(self, keyword: str) -> list[dict[str, Any]]:
-        """根据关键词模糊查询爆发趋势识别结果。"""
+        """根据关键词模糊查询爆发趋势识别结果，同时关联特征表补充更多字段。"""
         cleaned_keyword = keyword.strip()
         if not cleaned_keyword:
             return []
 
+        # 先查主预测表，再用 LEFT JOIN 关联特征表补充 hot_value_change / raw_probability
         sql = """
         SELECT
-            keyword,
-            burst_level,
-            burst_probability,
-            trend_direction,
-            current_rank,
-            current_hot_value,
-            hot_value_change_rate,
-            rank_change,
-            appear_count,
-            model_name,
-            predict_date,
-            created_at
-        FROM hot_search_burst_predictions
-        WHERE keyword LIKE %s
-        ORDER BY burst_probability DESC, current_hot_value DESC
+            p.keyword,
+            p.burst_level,
+            p.burst_probability,
+            p.burst_probability AS raw_probability,
+            p.trend_direction,
+            p.current_rank,
+            p.current_hot_value,
+            p.hot_value_change_rate,
+            p.rank_change,
+            p.appear_count,
+            p.model_name,
+            p.predict_date,
+            p.created_at,
+            COALESCE(f.hot_value_change, 0) AS hot_value_change,
+            COALESCE(f.feature_date, p.predict_date) AS feature_date
+        FROM hot_search_burst_predictions p
+        LEFT JOIN hot_search_feature_stats f
+            ON p.keyword = f.keyword
+        WHERE p.keyword LIKE %s
+        ORDER BY p.burst_probability DESC, p.current_hot_value DESC
         LIMIT 100
         """
         return self._fetch_all(sql, (f"%{cleaned_keyword}%",))

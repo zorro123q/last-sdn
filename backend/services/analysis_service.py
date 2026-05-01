@@ -26,7 +26,7 @@ class AnalysisService:
             stat_date,
             created_at
         FROM hot_search_keyword_stats
-        ORDER BY appear_count DESC, max_hot_value DESC
+        ORDER BY max_hot_value DESC, appear_count DESC
         LIMIT %s
         """
         return self._fetch_all(sql, (safe_limit,))

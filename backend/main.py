@@ -7,12 +7,16 @@ from fastapi.responses import JSONResponse
 from config import settings
 from database import DatabaseConnectionError, DatabaseQueryError
 from routes.analysis import router as analysis_router
+from routes.collector import router as collector_router
+from routes.debug import router as debug_router
 from routes.ml_analysis import export_router as ml_export_router
 from routes.ml_analysis import router as ml_analysis_router
 from routes.ranking import router as ranking_router
 from routes.summary import router as summary_router
 from routes.trend import router as trend_router
 from routes.sentiment_semantic import router as sentiment_semantic_router
+from routes.visual import router as visual_router
+from routes.v6_intelligence import router as v6_intelligence_router
 
 
 app = FastAPI(title="微博热搜分析系统", version="1.0.0")
@@ -30,9 +34,13 @@ app.include_router(ranking_router)
 app.include_router(trend_router)
 app.include_router(summary_router)
 app.include_router(analysis_router)
+app.include_router(collector_router)
 app.include_router(ml_analysis_router)
 app.include_router(ml_export_router)
 app.include_router(sentiment_semantic_router)
+app.include_router(visual_router)
+app.include_router(v6_intelligence_router)
+app.include_router(debug_router)
 
 
 @app.exception_handler(DatabaseConnectionError)

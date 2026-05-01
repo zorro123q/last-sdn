@@ -27,6 +27,7 @@ from backend.services.sentiment_semantic_service import (
     run_semantic_cluster_job,
     export_enhanced_report_csv,
     export_enhanced_report_excel,
+    get_report_debug_counts,
 )
 
 # 创建路由
@@ -175,6 +176,16 @@ async def api_run_semantic_cluster_job():
         return result
     except Exception as e:
         return {"success": False, "message": str(e), "returncode": -1}
+
+
+# ============================================================
+# 报告调试接口
+# ============================================================
+
+@router.get("/api/report/debug-counts")
+async def api_get_report_debug_counts():
+    """获取增强报告依赖的关键数据表记录数。"""
+    return get_report_debug_counts()
 
 
 # ============================================================
