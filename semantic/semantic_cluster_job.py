@@ -66,7 +66,9 @@ def run_semantic_cluster_job():
 
     # 3. 写入 MySQL
     print("[semantic] 正在写入 MySQL...")
-    write_semantic_clusters(results_df)
+    write_success = write_semantic_clusters(results_df)
+    if not write_success:
+        raise RuntimeError("[semantic] 写入 hot_search_semantic_clusters 失败，请检查数据库表结构和连接配置")
 
     print("=" * 50)
     print("[semantic] 语义聚类任务结束")

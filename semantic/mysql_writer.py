@@ -36,7 +36,7 @@ def write_semantic_clusters(results_df):
     """
     if results_df.empty:
         print("[semantic] 语义聚类结果为空，跳过写入 hot_search_semantic_clusters")
-        return
+        return False
 
     conn = None
     try:
@@ -50,7 +50,7 @@ def write_semantic_clusters(results_df):
         except pymysql.MySQLError as e:
             print(f"[semantic] 清空表失败，可能表不存在：{e}")
             print("[semantic] 请先执行 sql/v5_sentiment_semantic.sql 创建表")
-            return
+            return False
 
         # 插入数据
         insert_sql = """
@@ -74,11 +74,13 @@ def write_semantic_clusters(results_df):
 
         conn.commit()
         print(f"[semantic] 已写入 {len(results_df)} 条语义聚类结果到 hot_search_semantic_clusters")
+        return True
 
     except pymysql.MySQLError as e:
         print(f"[semantic] 写入 hot_search_semantic_clusters 失败：{e}")
         if conn:
             conn.rollback()
+        return False
     finally:
         if conn:
             conn.close()

@@ -101,7 +101,7 @@ def load_hot_search_titles(limit=None):
 
     except pymysql.MySQLError as e:
         print(f"[semantic] 数据库读取失败：{e}")
-        return pd.DataFrame()
+        raise RuntimeError(f"[semantic] 读取 hot_search_raw 失败：{e}") from e
     finally:
         if conn:
             conn.close()

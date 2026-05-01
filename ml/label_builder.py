@@ -47,12 +47,12 @@ def _build_burst_level(row: pd.Series) -> int:
 
 def _build_trend_direction(row: pd.Series) -> str:
     """根据热度和排名变化给出趋势方向，便于前端中文展示。"""
-    hot_value_change = _to_float(row.get("hot_value_change"), default=0.0)
+    hot_value_change_rate = _to_float(row.get("hot_value_change_rate"), default=0.0)
     rank_change = _to_float(row.get("rank_change"), default=0.0)
 
-    if hot_value_change > 0 or rank_change > 0:
+    if hot_value_change_rate > 0.15 or rank_change >= 3:
         return "rising"
-    if hot_value_change < 0 or rank_change < 0:
+    if hot_value_change_rate < -0.15 or rank_change <= -3:
         return "falling"
     return "stable"
 
