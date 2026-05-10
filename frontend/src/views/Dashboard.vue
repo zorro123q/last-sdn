@@ -134,12 +134,13 @@
         <section class="panel">
           <div class="panel-header">
             <div>
-              <h2>关键词趋势分析</h2>
-              <p>点击右侧热搜榜条目，或手动输入关键词查看历史热度变化。</p>
+              <h2>热度趋势分析</h2>
+              <p>默认展示全库每日最高热度；输入关键词可查看该词历史热度变化。</p>
             </div>
             <form class="search-box" @submit.prevent="handleSearch">
-              <input v-model="keyword" type="text" placeholder="输入关键词，例如：高考" />
-              <button type="submit" :disabled="loadingTrend">{{ loadingTrend ? "加载中..." : "查询趋势" }}</button>
+              <input v-model="keyword" type="text" placeholder="输入关键词过滤，留空显示全部" />
+              <button type="submit" :disabled="loadingTrend">{{ loadingTrend ? "加载中..." : "查询" }}</button>
+              <button v-if="keyword" type="button" class="clear-btn" @click="() => { keyword = ''; queryTrend(''); }" title="清空，回到全库视图">✕</button>
             </form>
           </div>
           <div class="chart-wrap">
@@ -148,17 +149,27 @@
           <p v-if="trendMessage" class="helper-text">{{ trendMessage }}</p>
         </section>
 
-        <!-- 热搜活跃时间热力图 -->
+        <!-- 热搜活跃时段分析 -->
         <section class="panel">
           <div class="panel-header">
             <div>
-              <h2>热搜活跃时间热力图</h2>
-              <p>展示各日期不同小时段的热搜采集密度。</p>
+              <h2>热搜活跃时段分析</h2>
+              <p>柱状图：24小时活跃趋势 | 玫瑰图：活跃时段结构占比</p>
+            </div>
+            <div class="view-toggle">
+              <button :class="['toggle-btn', hourlyView === 'rose' ? 'active' : '']" @click="switchHourlyView('rose')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;margin-right:3px"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+                玫瑰图
+              </button>
+              <button :class="['toggle-btn', hourlyView === 'bar' ? 'active' : '']" @click="switchHourlyView('bar')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;margin-right:3px"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                柱状图
+              </button>
             </div>
           </div>
           <div v-if="heatmapLoading" class="chart-loading">加载中...</div>
           <div v-else-if="!heatmapData.length" class="chart-empty">
-            <EmptyState title="暂无热力图数据" description="需要至少包含小时信息的采集记录才能生成热力图。" />
+            <EmptyState title="暂无数据" description="需要包含小时信息的采集记录才能生成活跃时段分析。" />
           </div>
           <div v-else class="chart-wrap">
             <div ref="heatmapRef" class="chart"></div>
@@ -233,21 +244,20 @@
         <section class="panel">
           <div class="panel-header">
             <div>
-              <h2>趋势数据明细</h2>
-              <p v-if="keyword">当前关键词：<strong style="color: var(--primary)">{{ keyword }}</strong></p>
-              <p v-else>当前关键词对应的历史采集点。</p>
+              <h2>热度数据明细</h2>
+              <p v-if="keyword">过滤关键词：<strong style="color: var(--primary)">{{ keyword }}</strong></p>
+              <p v-else>全库数据 · 每行为当日所有热搜中的最高热度</p>
             </div>
           </div>
           <div class="table-wrap">
-            <table class="trend-table">
-              <thead><tr><th>采集时间</th><th>热度值</th><th>最佳排名</th></tr></thead>
+            <table class="data-table trend-table">
+              <thead><tr><th>日期</th><th>当日最高热度</th></tr></thead>
               <tbody>
-                <tr v-for="point in trendPoints" :key="point.fetch_time">
-                  <td>{{ point.fetch_time }}</td>
+                <tr v-for="point in trendPoints" :key="point.stat_date || point.fetch_time">
+                  <td>{{ String(point.stat_date || point.fetch_time || "").slice(0, 10) }}</td>
                   <td class="hot-cell">{{ formatNumber(point.hot_value) }}</td>
-                  <td><span class="rank-badge">{{ point.best_rank }}</span></td>
                 </tr>
-                <tr v-if="!trendPoints.length"><td colspan="3" class="table-empty">暂无趋势数据，请更换关键词或先采集更多数据</td></tr>
+                <tr v-if="!trendPoints.length"><td colspan="2" class="table-empty">暂无数据，请先运行采集器</td></tr>
               </tbody>
             </table>
           </div>
@@ -279,10 +289,8 @@ function startAutoRefresh() {
     // 静默刷新：不改变 loadingPage，避免 UI 抖动
     try {
       await Promise.all([loadSummaryData(), loadRankingData(), loadHeatmap(), loadMovers(), loadInsightsData()]);
-      // 如果当前有关键词，同步刷新趋势数据
-      if (keyword.value) {
-        await queryTrend(keyword.value);
-      }
+      // 自动刷新趋势图（有关键词时按关键词，无关键词时刷全库）
+      await queryTrend(keyword.value);
       const now = new Date();
       lastRefreshTime.value = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}`;
     } catch (err) {
@@ -306,7 +314,7 @@ const summary = ref({ total_records: 0, total_batches: 0, total_keywords: 0, lat
 const rankingList = ref([]);
 const keyword = ref("");
 const trendPoints = ref([]);
-const trendMessage = ref("请输入关键词后查询趋势。");
+const trendMessage = ref("正在加载全库热度趋势...");
 const pageError = ref("");
 const noDataTip = ref(false);   // 数据库暂无数据时显示友好提示
 const loadingPage = ref(false);
@@ -325,6 +333,7 @@ const heatmapRef = ref(null);
 let heatmapChart = null;
 const heatmapData = ref([]);
 const heatmapLoading = ref(false);
+const hourlyView = ref("rose"); // "rose" | "bar"
 
 // 排名变化
 const rankMovers = ref({ up: [], down: [] });
@@ -362,134 +371,978 @@ function getRankBadgeClass(rank) {
 function buildChart() {
   if (!chartRef.value) return;
   if (!chartInstance) chartInstance = echarts.init(chartRef.value);
-  const times = trendPoints.value.map((p) => p.fetch_time);
-  const values = trendPoints.value.map((p) => Number(p.hot_value || 0));
+
+  if (!trendPoints.value.length) {
+    chartInstance.setOption({
+      backgroundColor: "transparent",
+      tooltip: { show: false },
+      grid: { left: 0, right: 0, top: 0, bottom: 0 },
+      xAxis: { show: false, type: "category", data: [] },
+      yAxis: { show: false, type: "value" },
+      dataZoom: [],
+      series: [],
+      graphic: [
+        { type: "circle", left: "center", top: "38%", silent: true, shape: { cx: 0, cy: 0, r: 38 }, style: { fill: "rgba(37,99,235,0.07)" } },
+        { type: "text", left: "center", top: "45%", silent: true, style: { text: "暂无趋势数据", fill: "#0f172a", fontSize: 17, fontWeight: 800, textAlign: "center" } },
+        { type: "text", left: "center", top: "54%", silent: true, style: { text: "请点击右侧热搜榜或更换关键词后查询", fill: "#64748b", fontSize: 13, fontWeight: 600, textAlign: "center" } },
+      ],
+    }, true);
+    return;
+  }
+
+  const times = trendPoints.value.map((p) => String(p.stat_date || p.fetch_time || "").slice(0, 10));
+  const hotValues = trendPoints.value.map((p) => Number(p.hot_value || 0));
+  const zoomStart = times.length > 30 ? Math.max(0, 100 - (30 / times.length) * 100) : 0;
+  const seriesLabel = keyword.value ? `「${keyword.value}」每日最高热度` : "全库每日最高热度";
+
+  // ── 高级统计计算 ───────────────────────────────────────────
+  const avgVal = hotValues.length ? hotValues.reduce((a, b) => a + b, 0) / hotValues.length : 0;
+  const maxVal = Math.max(...hotValues);
+  const maxIdx = hotValues.indexOf(maxVal);
+  const minVal = Math.min(...hotValues);
+  const minIdx = hotValues.indexOf(minVal);
+  const stdDev = hotValues.length > 1
+    ? Math.sqrt(hotValues.reduce((s, v) => s + Math.pow(v - avgVal, 2), 0) / hotValues.length)
+    : 0;
+  const upperBand = avgVal + stdDev;
+  const lowerBand = Math.max(0, avgVal - stdDev);
+
+  // 动态颜色：根据热度归一化值分配渐变色（冷→暖）
+  const colorStops = [
+    { offset: 0.0, color: "#60a5fa" },  // 浅蓝（低）
+    { offset: 0.4, color: "#2563eb" },  // 蓝（中）
+    { offset: 0.7, color: "#8b5cf6" },  // 紫（中高）
+    { offset: 1.0, color: "#ef4444" },  // 红（高）
+  ];
+
+  // 生成平滑趋势线（移动平均，窗口=5）
+  const smoothWindow = Math.min(5, Math.max(3, Math.floor(times.length / 4)));
+  const trendLine = hotValues.map((_, i) => {
+    const start = Math.max(0, i - smoothWindow + 1);
+    const slice = hotValues.slice(start, i + 1);
+    return Math.round(slice.reduce((a, b) => a + b, 0) / slice.length);
+  });
+
+  // 一阶差分（变化率）
+  const diffLine = hotValues.map((v, i) =>
+    i === 0 ? 0 : Math.round(((v - hotValues[i - 1]) / hotValues[i - 1]) * 100)
+  );
+
+  // 峰值/谷值标记
+  const markPoints = [];
+  // 标注最高点
+  if (maxIdx >= 0) {
+    markPoints.push({
+      coord: [maxIdx, maxVal],
+      value: maxVal,
+      name: "最高",
+      itemStyle: { color: "#ef4444", borderColor: "#fff", borderWidth: 2, shadowBlur: 10, shadowColor: "rgba(239,68,68,0.5)" },
+    });
+  }
+  // 标注最低点（仅在数据跨度足够时显示）
+  if (times.length > 7 && minIdx !== maxIdx) {
+    markPoints.push({
+      coord: [minIdx, minVal],
+      value: minVal,
+      name: "最低",
+      itemStyle: { color: "#38bdf8", borderColor: "#fff", borderWidth: 2, shadowBlur: 10, shadowColor: "rgba(56,189,248,0.5)" },
+    });
+  }
+
   chartInstance.setOption({
     backgroundColor: "transparent",
-    tooltip: { trigger: "axis", backgroundColor: "rgba(15,23,42,0.9)", borderColor: "rgba(148,163,184,0.3)", textStyle: { color: "#e8f0ff" } },
-    grid: { left: 50, right: 20, top: 36, bottom: 46 },
-    xAxis: { type: "category", data: times, boundaryGap: false, axisLabel: { color: "#64748b", rotate: 30, fontSize: 11 }, axisLine: { lineStyle: { color: "#cbd5e1" } } },
-    yAxis: { type: "value", axisLabel: { color: "#64748b", formatter: (v) => (v >= 10000 ? `${Math.round(v / 10000)}万` : v) }, splitLine: { lineStyle: { color: "rgba(148,163,184,0.2)" } } },
-    series: [{
-      name: "热度值", type: "line", smooth: true, symbolSize: 8, symbol: "circle", data: values,
-      lineStyle: { width: 3, color: "#2563eb" },
-      itemStyle: { color: "#2563eb", borderWidth: 2, borderColor: "#fff" },
-      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(37,99,235,0.25)" }, { offset: 1, color: "rgba(37,99,235,0.02)" }]) },
-    }],
-  });
-}
+    graphic: [],
+    color: ["#2563eb"],
+    // ── 动画配置 ──────────────────────────────────────────────
+    animation: true,
+    animationDuration: 1400,
+    animationEasing: "cubicOut",
+    animationDurationUpdate: 600,
+    animationEasingUpdate: "cubicInOut",
 
-function buildHeatmap() {
-  // 1. DOM 检查
-  if (!heatmapRef.value) {
-    console.warn("[heatmap] heatmapRef 未挂载，跳过 buildHeatmap");
-    return;
-  }
-  const data = heatmapData.value;
-  if (!data.length) {
-    console.warn("[heatmap] 数据为空，跳过 buildHeatmap");
-    return;
-  }
-
-  // 2. 销毁旧实例再重新 init（v-else 节点重新挂载后容器句柄已变）
-  if (heatmapChart) {
-    heatmapChart.dispose();
-    heatmapChart = null;
-  }
-  heatmapChart = echarts.init(heatmapRef.value);
-
-  // 3. 收集所有日期（去重、升序）
-  const dates = [...new Set(data.map((d) => d.date))].sort();
-  // x 轴标签（0时 ~ 23时，共 24 个）
-  const hourLabels = Array.from({ length: 24 }, (_, i) => `${i}时`);
-
-  // 4. 构建 lookup map：{ "日期_小时" -> item }，快速查找
-  const lookup = {};
-  data.forEach((d) => {
-    lookup[`${d.date}_${Number(d.hour)}`] = d;
-  });
-
-  // 5. 构造完整的 24×n 格子数据（缺失小时填 0，确保热力图网格完整显示）
-  // ECharts heatmap series.data 格式：[xIndex, yIndex, value]
-  // xAxis = 小时（category index 0-23），yAxis = 日期（category index）
-  const seriesData = [];
-  for (let dIdx = 0; dIdx < dates.length; dIdx++) {
-    for (let hIdx = 0; hIdx < 24; hIdx++) {
-      const item = lookup[`${dates[dIdx]}_${hIdx}`];
-      seriesData.push([
-        hIdx,                                  // x: 小时 index（0-23）
-        dIdx,                                  // y: 日期 index
-        item ? Number(item.count || 0) : 0,    // value
-      ]);
-    }
-  }
-
-  // 6. visualMap 上限取实际最大值
-  const maxCount = Math.max(...data.map((d) => Number(d.count || 0)), 1);
-
-  console.log(`[heatmap] dates=${dates.length} rows=${data.length} max=${maxCount}`);
-
-  heatmapChart.setOption({
-    backgroundColor: "transparent",
+    // ── 增强 Tooltip ──────────────────────────────────────────
     tooltip: {
-      position: "top",
-      backgroundColor: "rgba(15,23,42,0.92)",
-      borderColor: "rgba(148,163,184,0.3)",
+      trigger: "axis",
+      backgroundColor: "rgba(15,23,42,0.88)",
+      borderColor: "rgba(148,163,184,0.28)",
+      borderWidth: 1,
+      padding: 0,
       textStyle: { color: "#e8f0ff" },
-      formatter(p) {
-        const [hIdx, dIdx, cnt] = p.data;
-        const dateLabel = dates[dIdx] || "";
-        const hourStr = String(hIdx).padStart(2, "0");
-        const item = lookup[`${dateLabel}_${hIdx}`];
-        if (!cnt) return `<div style="color:#94a3b8">${dateLabel} ${hourStr}:00 无数据</div>`;
+      extraCssText: "backdrop-filter: blur(16px); border-radius: 16px; box-shadow: 0 20px 48px rgba(15,23,42,0.32); overflow: hidden;",
+      axisPointer: { type: "shadow", shadowStyle: { color: "rgba(37,99,235,0.10)" } },
+      formatter(params) {
+        const bar = params.find((p) => p.seriesType === "bar" && p.seriesName !== "均值线");
+        if (!bar) return "";
+        const dataIndex = bar.dataIndex;
+        const point = trendPoints.value[dataIndex] || {};
+        const val = Number(point.hot_value || 0);
+        const delta = dataIndex > 0 ? val - Number(trendPoints.value[dataIndex - 1]?.hot_value || 0) : 0;
+        const pct = dataIndex > 0 && Number(trendPoints.value[dataIndex - 1]?.hot_value || 0) > 0
+          ? (((val - Number(trendPoints.value[dataIndex - 1]?.hot_value || 0)) / Number(trendPoints.value[dataIndex - 1]?.hot_value || 0)) * 100).toFixed(1)
+          : null;
+        const diff = avgVal > 0 ? val - avgVal : 0;
+        const diffPct = avgVal > 0 ? ((diff / avgVal) * 100).toFixed(1) : null;
+        const deltaStr = delta > 0 ? `<span style="color:#4ade80">▲ +${formatNumber(delta)}</span>` : delta < 0 ? `<span style="color:#f87171">▼ ${formatNumber(delta)}</span>` : `<span style="color:#94a3b8">— 持平</span>`;
+        const pctStr = pct !== null ? (Number(pct) > 0 ? `<span style="color:#4ade80">+${pct}%</span>` : `<span style="color:#f87171">${pct}%</span>`) : "";
+        const avgDiffStr = diffPct !== null
+          ? (diff > 0 ? `<span style="color:#fbbf24">高于均值 ${diffPct}%</span>` : `<span style="color:#60a5fa">低于均值 ${Math.abs(diffPct)}%</span>`)
+          : "";
+        const diffRate = diffLine[dataIndex] || 0;
+        const diffRateStr = diffRate > 0 ? `<span style="color:#c084fc">+${diffRate}%</span>` : diffRate < 0 ? `<span style="color:#94a3b8">${diffRate}%</span>` : `<span style="color:#94a3b8">—</span>`;
         return (
-          `<div style="font-weight:700;margin-bottom:4px">${dateLabel} ${hourStr}:00</div>` +
-          `<div>热搜数：${cnt}</div>` +
-          (item && item.avg_hot_value != null
-            ? `<div>平均热度：${formatNumber(Number(item.avg_hot_value))}</div>`
-            : "")
+          `<div style="min-width:240px;padding:14px 16px;">` +
+          `<div style="font-size:12px;color:#94a3b8;margin-bottom:10px;font-weight:600;">📅 ${times[dataIndex] || ""}</div>` +
+          `<div style="display:flex;justify-content:space-between;gap:20px;margin-bottom:8px;"><span style="color:#67e8f9;">热度值</span><strong style="color:#fff;font-size:18px;">${formatNumber(val)}</strong></div>` +
+          `<div style="display:flex;justify-content:space-between;gap:20px;margin-bottom:6px;"><span style="color:#94a3b8;font-size:12px;">日涨跌</span><span style="font-size:13px;">${deltaStr} ${pctStr}</span></div>` +
+          (avgDiffStr ? `<div style="display:flex;justify-content:space-between;gap:20px;margin-bottom:6px;"><span style="color:#94a3b8;font-size:12px;">偏离均值</span><span style="font-size:13px;">${avgDiffStr}</span></div>` : "") +
+          `<div style="display:flex;justify-content:space-between;gap:20px;margin-bottom:4px;"><span style="color:#94a3b8;font-size:12px;">变化率</span><span style="font-size:13px;">${diffRateStr}</span></div>` +
+          `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;gap:12px;font-size:10px;color:#64748b;">` +
+          `<span>均值 ${formatNumber(Math.round(avgVal))}</span>` +
+          `<span>σ ${formatNumber(Math.round(stdDev))}</span>` +
+          `<span>极差 ${formatNumber(maxVal - minVal)}</span>` +
+          `</div>` +
+          `</div>`
         );
       },
     },
-    grid: { left: 80, right: 20, top: 16, bottom: 68 },
+
+    // ── 图例（四系列） ─────────────────────────────────────────
+    legend: {
+      top: 0,
+      right: 8,
+      itemWidth: 18,
+      itemHeight: 10,
+      textStyle: { color: "#64748b", fontSize: 11 },
+      data: [seriesLabel, "趋势线", "日变化率"],
+    },
+
+    grid: { left: 62, right: 32, top: 52, bottom: 96 },
+
+    // ── 缩放控制器 ────────────────────────────────────────────
+    dataZoom: [
+      {
+        type: "inside",
+        start: zoomStart,
+        end: 100,
+        minValueSpan: Math.min(7, Math.max(3, Math.floor(times.length / 8))),
+      },
+      {
+        type: "slider",
+        start: zoomStart,
+        end: 100,
+        height: 28,
+        bottom: 24,
+        borderColor: "rgba(148,163,184,0.22)",
+        fillerColor: "rgba(37,99,235,0.12)",
+        handleStyle: { color: "#2563eb", borderColor: "#2563eb" },
+        textStyle: { color: "#64748b", fontSize: 11 },
+        moveHandleStyle: { color: "#2563eb", opacity: 0.6 },
+        emphasis: { handleStyle: { color: "#1d4ed8" } },
+      },
+    ],
+
+    // ── X 轴 ─────────────────────────────────────────────────
     xAxis: {
       type: "category",
-      data: hourLabels,
-      splitArea: { show: true, areaStyle: { color: ["rgba(241,245,249,0.5)", "rgba(255,255,255,0.5)"] } },
-      axisLabel: { color: "#64748b", fontSize: 10, interval: 1 },
-      axisLine: { lineStyle: { color: "rgba(148,163,184,0.3)" } },
+      data: times,
+      boundaryGap: true,
+      axisLabel: { color: "#64748b", rotate: 30, fontSize: 11, margin: 8 },
+      axisLine: { lineStyle: { color: "#cbd5e1" } },
       axisTick: { show: false },
+    },
+
+    // ── Y 轴（双轴）────────────────────────────────────────────
+    yAxis: [
+      {
+        type: "value",
+        name: "热度值",
+        nameTextStyle: { color: "#64748b", fontSize: 11, padding: [0, 0, 0, -8] },
+        axisLabel: { color: "#64748b", formatter: (v) => (v >= 10000 ? `${Math.round(v / 10000)}万` : v) },
+        splitLine: { lineStyle: { color: "rgba(148,163,184,0.15)", type: "dashed" } },
+      },
+      {
+        type: "value",
+        name: "变化率%",
+        nameTextStyle: { color: "#a78bfa", fontSize: 10, padding: [0, 0, 0, 0] },
+        axisLabel: { color: "#a78bfa", formatter: (v) => `${v > 0 ? "+" : ""}${v}%`, fontSize: 10 },
+        splitLine: { show: false },
+        min: (val) => Math.min(-10, Math.floor(val.min / 5) * 5),
+        max: (val) => Math.max(10, Math.ceil(val.max / 5) * 5),
+      },
+    ],
+
+    // ── 波动通道（均值 ± 标准差）──────────────────────────────────
+    markLine: {
+      silent: true,
+      symbol: "none",
+      lineStyle: { type: "dashed", width: 1.5, color: "rgba(139,92,246,0.35)", opacity: 0.7 },
+      label: {
+        formatter: (p) => p.seriesIndex === 0 ? `均值±σ\n${Math.round(avgVal)}±${Math.round(stdDev)}` : "",
+        position: "insideEndTop",
+        color: "#94a3b8",
+        fontSize: 10,
+        fontWeight: 600,
+        backgroundColor: "rgba(255,255,255,0.88)",
+        padding: [3, 8, 3, 8],
+        borderRadius: 6,
+      },
+      data: [
+        { yAxis: upperBand, name: "上轨" },
+        { yAxis: lowerBand, name: "下轨" },
+        { type: "average", name: "均值" },
+      ],
+    },
+
+    // ── 峰值标注 ───────────────────────────────────────────────
+    markPoint: {
+      symbol: "circle",
+      symbolSize: 14,
+      label: {
+        formatter: "{b}\n{c}",
+        position: "top",
+        distance: 6,
+        color: "#fff",
+        fontSize: 11,
+        fontWeight: 700,
+        backgroundColor: "rgba(15,23,42,0.72)",
+        padding: [4, 8, 4, 8],
+        borderRadius: 8,
+      },
+      data: markPoints,
+    },
+
+    // ── 四系列：波动带 + 柱状图 + 平滑趋势线 + 变化率 ─────────────
+    series: [
+      // ── 波动通道面积（均值 ± σ）───────────────────────────────
+      {
+        name: "波动带",
+        type: "custom",
+        renderItem(params, api) {
+          const upper = api.coord([0, upperBand])[1];
+          const lower = api.coord([0, lowerBand])[1];
+          const width = Math.abs(api.coord([1, 0])[0] - api.coord([0, 0])[0]);
+          return {
+            type: "rect",
+            shape: {
+              x: api.coord([params.dataIndex, 0])[0] - width / 2,
+              y: upper,
+              width,
+              height: lower - upper,
+            },
+            style: {
+              fill: "rgba(139,92,246,0.07)",
+              stroke: "rgba(139,92,246,0.18)",
+              lineWidth: 1,
+            },
+          };
+        },
+        data: hotValues.map((v) => v),
+        z: 1,
+      },
+      {
+        name: seriesLabel,
+        type: "bar",
+        barMaxWidth: 32,
+        barGap: "10%",
+        data: hotValues.map((value, i) => ({
+          value,
+          itemStyle: {
+            // 动态颜色：归一化到 [0,1] 区间后查表
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: getColorForValue(value, minVal, maxVal, 0.0, 0.4) },
+              { offset: 0.5, color: getColorForValue(value, minVal, maxVal, 0.4, 0.7) },
+              { offset: 1, color: getColorForValue(value, minVal, maxVal, 0.7, 1.0) },
+            ]),
+            borderRadius: [6, 6, 0, 0],
+          },
+          // 峰值高亮
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 18,
+              shadowColor: `rgba(${hexToRgb(getColorForValue(value, minVal, maxVal, 0.7, 1.0))}, 0.35)`,
+              borderColor: "#fff",
+              borderWidth: 1.5,
+            },
+          },
+        })),
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { type: "dashed", width: 2, color: "#94a3b8", opacity: 0.7 },
+          label: {
+            formatter: "均值 {c}",
+            position: "insideEndTop",
+            color: "#64748b",
+            fontSize: 11,
+            fontWeight: 600,
+            backgroundColor: "rgba(255,255,255,0.88)",
+            padding: [3, 8, 3, 8],
+            borderRadius: 6,
+          },
+          data: [{ type: "average" }],
+        },
+        markPoint: {
+          symbol: "circle",
+          symbolSize: 14,
+          label: {
+            formatter: "{b}\n{c}",
+            position: "top",
+            distance: 6,
+            color: "#fff",
+            fontSize: 11,
+            fontWeight: 700,
+            backgroundColor: "rgba(15,23,42,0.72)",
+            padding: [4, 8, 4, 8],
+            borderRadius: 8,
+          },
+          data: markPoints,
+        },
+      },
+      // ── 平滑趋势线（叠加在柱状图上方）─────────────────────────
+      {
+        name: "趋势线",
+        type: "line",
+        smooth: 0.5,
+        symbol: "circle",
+        symbolSize: 5,
+        showSymbol: false,
+        lineStyle: { width: 3, color: "#06b6d4", type: "solid", opacity: 0.85 },
+        itemStyle: { color: "#06b6d4", borderColor: "#fff", borderWidth: 2 },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: "rgba(6,182,212,0.22)" },
+            { offset: 1, color: "rgba(6,182,212,0.02)" },
+          ]),
+        },
+        emphasis: { focus: "series", itemStyle: { symbolSize: 8, shadowBlur: 10, shadowColor: "rgba(6,182,212,0.6)" } },
+        data: trendLine,
+        z: 2,
+      },
+      // ── 变化率指标（右 Y 轴）───────────────────────────────────
+      {
+        name: "日变化率",
+        type: "line",
+        smooth: 0.3,
+        symbol: "circle",
+        symbolSize: 4,
+        showSymbol: false,
+        yAxisIndex: 1,
+        lineStyle: { width: 1.8, color: "#8b5cf6", type: "solid", opacity: 0.7 },
+        itemStyle: { color: "#8b5cf6", borderColor: "#fff", borderWidth: 1.5 },
+        emphasis: { focus: "series", itemStyle: { symbolSize: 7, shadowBlur: 10, shadowColor: "rgba(139,92,246,0.5)" } },
+        data: diffLine,
+        z: 3,
+      },
+    ],
+  }, true);
+}
+
+// ── 辅助函数：热度值 → 颜色映射 ──────────────────────────────
+function getColorForValue(value, minVal, maxVal, stopMin, stopMax) {
+  const range = maxVal - minVal || 1;
+  const ratio = (value - minVal) / range;
+  const t = Math.max(0, Math.min(1, stopMin + ratio * (stopMax - stopMin)));
+  const colors = [
+    { stop: 0.0, r: 96, g: 165, b: 250 },   // #60a5fa 浅蓝
+    { stop: 0.4, r: 37, g: 99, b: 235 },   // #2563eb 蓝
+    { stop: 0.7, r: 139, g: 92, b: 246 },  // #8b5cf6 紫
+    { stop: 1.0, r: 239, g: 68, b: 68 },   // #ef4444 红
+  ];
+  let c1 = colors[0], c2 = colors[1];
+  for (let i = 1; i < colors.length; i++) {
+    if (t >= colors[i - 1].stop && t <= colors[i].stop) {
+      c1 = colors[i - 1]; c2 = colors[i]; break;
+    }
+  }
+  const seg = c2.stop - c1.stop || 1;
+  const f = (t - c1.stop) / seg;
+  const r = Math.round(c1.r + (c2.r - c1.r) * f);
+  const g = Math.round(c1.g + (c2.g - c1.g) * f);
+  const b = Math.round(c1.b + (c2.b - c1.b) * f);
+  return `rgb(${r},${g},${b})`;
+}
+
+function hexToRgb(color) {
+  if (!color) return "0,0,0";
+  const m = color.match(/^rgb\((\d+),(\d+),(\d+)\)$/);
+  if (m) return `${m[1]},${m[2]},${m[3]}`;
+  const hex = color.replace("#", "");
+  const bigint = parseInt(hex, 16);
+  return `${(bigint >> 16) & 255},${(bigint >> 8) & 255},${bigint & 255}`;
+}
+
+function buildHeatmap() {
+  if (!heatmapRef.value) { console.warn("[hourly] heatmapRef 未挂载，跳过"); return; }
+  const data = heatmapData.value;
+  if (!data.length) { console.warn("[hourly] 数据为空，跳过"); return; }
+
+  if (heatmapChart) { heatmapChart.dispose(); heatmapChart = null; }
+  heatmapChart = echarts.init(heatmapRef.value);
+
+  const { labels, counts } = buildHourlyActivityData(data);
+  const maxCount = Math.max(...counts, 1);
+
+  if (hourlyView.value === "rose") {
+    buildHourlyRose(buildTimePeriodRoseData(data));
+  } else {
+    buildHourlyBar(labels, counts, maxCount);
+  }
+}
+
+const TIME_PERIODS = [
+  { name: "凌晨", start: 0, end: 5 },
+  { name: "早晨", start: 6, end: 9 },
+  { name: "上午", start: 10, end: 11 },
+  { name: "下午", start: 12, end: 17 },
+  { name: "晚间", start: 18, end: 21 },
+  { name: "深夜", start: 22, end: 23 },
+];
+
+function parseHourlyNumber(raw) {
+  const value = Number(String(raw ?? 0).replace(/,/g, ""));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function getHourlyRecordHour(record) {
+  const raw = record?.hour ?? record?.hour_of_day ?? record?.time ?? record?.label;
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "number") {
+    const hour = Math.floor(raw);
+    return hour >= 0 && hour <= 23 ? hour : null;
+  }
+
+  const text = String(raw).trim();
+  if (!text) return null;
+
+  const timeMatch = text.match(/(?:^|[T\s])([01]?\d|2[0-3])(?::[0-5]?\d)?(?=\s*$|[^\d])/);
+  const cnMatch = text.match(/([01]?\d|2[0-3])\s*(?:时|点)/);
+  const hourText = timeMatch?.[1] ?? cnMatch?.[1] ?? (/^\d{1,2}$/.test(text) ? text : null);
+  if (hourText === null) return null;
+
+  const hour = Number(hourText);
+  return Number.isFinite(hour) && hour >= 0 && hour <= 23 ? hour : null;
+}
+
+function getHourlyRecordValue(record) {
+  return parseHourlyNumber(record?.count ?? record?.value ?? record?.total ?? record?.active_count ?? 0);
+}
+
+function buildHourlyActivityData(hourlyData = []) {
+  const labels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
+  const counts = Array.from({ length: 24 }, () => 0);
+
+  (Array.isArray(hourlyData) ? hourlyData : []).forEach((record) => {
+    const hour = getHourlyRecordHour(record);
+    if (hour === null) return;
+    counts[hour] += getHourlyRecordValue(record);
+  });
+
+  return { labels, counts };
+}
+
+function buildTimePeriodRoseData(hourlyData = []) {
+  const periodData = TIME_PERIODS.map((period) => ({ name: period.name, value: 0 }));
+
+  (Array.isArray(hourlyData) ? hourlyData : []).forEach((record) => {
+    const hour = getHourlyRecordHour(record);
+    if (hour === null) return;
+
+    const periodIndex = TIME_PERIODS.findIndex((period) => hour >= period.start && hour <= period.end);
+    if (periodIndex >= 0) {
+      periodData[periodIndex].value += getHourlyRecordValue(record);
+    }
+  });
+
+  return periodData;
+}
+
+function buildHourlyBar(labels, counts, maxCount) {
+  const peakIdx = counts.indexOf(Math.max(...counts));
+
+  heatmapChart.setOption({
+    backgroundColor: "transparent",
+    animation: true,
+    animationDuration: 1000,
+    animationEasing: "cubicOut",
+    title: {
+      text: "24小时活跃趋势",
+      left: 8,
+      top: 0,
+      textStyle: { color: "#0f172a", fontSize: 14, fontWeight: 800 },
+    },
+
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow", shadowStyle: { color: "rgba(37,99,235,0.08)" } },
+      backgroundColor: "rgba(255,255,255,0.98)",
+      borderColor: "rgba(148,163,184,0.2)",
+      borderWidth: 1,
+      padding: 0,
+      textStyle: { color: "#1e293b" },
+      extraCssText: "border-radius:14px;box-shadow:0 12px 40px rgba(15,23,42,0.12);",
+      formatter(params) {
+        const bar = params.find((p) => p.seriesName === "活跃次数");
+        if (!bar) return "";
+        const i = bar.dataIndex;
+        const ratio = maxCount > 0 ? counts[i] / maxCount : 0;
+        const isPeak = i === peakIdx;
+        return (
+          `<div style="min-width:190px;padding:14px 16px;">` +
+          `<div style="font-size:12px;color:#64748b;margin-bottom:10px;font-weight:500;">${isPeak ? '★ ' : ''}${labels[i]}${isPeak ? ' <span style="color:#f59e0b">(峰值)</span>' : ''}</div>` +
+          `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">` +
+          `<span style="font-size:11px;color:#64748b;">活跃次数</span>` +
+          `<div style="flex:1;height:6px;background:#e2e8f0;border-radius:3px;">` +
+          `<div style="height:100%;width:${Math.round(ratio * 100)}%;background:linear-gradient(90deg,#2563eb,#60a5fa);border-radius:3px;"></div>` +
+          `</div>` +
+          `<strong style="font-size:18px;font-weight:800;color:#1e293b;min-width:40px;text-align:right;">${counts[i]}</strong>` +
+          `</div>` +
+          `<div style="display:flex;justify-content:space-between;gap:16px;">` +
+          `<div><div style="font-size:10px;color:#94a3b8;">小时</div><div style="font-size:15px;font-weight:700;color:#2563eb;">${labels[i]}</div></div>` +
+          `<div style="text-align:right;"><div style="font-size:10px;color:#94a3b8;">占比峰值</div><div style="font-size:15px;font-weight:700;color:#64748b;">${Math.round(ratio * 100)}%</div></div>` +
+          `</div>` +
+          `</div>`
+        );
+      },
+    },
+    grid: { left: 56, right: 24, top: 48, bottom: 56 },
+    xAxis: {
+      type: "category",
+      data: labels,
+      axisLabel: {
+        color: "#64748b", fontSize: 10, interval: 2,
+        formatter: (v) => { const h = parseInt(v); return [0, 6, 12, 18, 23].includes(h) ? v : ""; },
+      },
+      axisLine: { lineStyle: { color: "#e2e8f0" } },
+      axisTick: { show: false },
+      splitLine: { show: false },
     },
     yAxis: {
-      type: "category",
-      data: dates,
-      splitArea: { show: true, areaStyle: { color: ["rgba(241,245,249,0.5)", "rgba(255,255,255,0.5)"] } },
-      axisLabel: { color: "#64748b", fontSize: 11 },
-      axisLine: { lineStyle: { color: "rgba(148,163,184,0.3)" } },
-      axisTick: { show: false },
+      type: "value",
+      name: "活跃次数",
+      minInterval: 1,
+      nameTextStyle: { color: "#64748b", fontSize: 10 },
+      axisLabel: { color: "#64748b", fontSize: 10 },
+      splitLine: { lineStyle: { color: "#f1f5f9", type: "dashed" } },
     },
-    visualMap: {
-      min: 0,
-      max: maxCount,
-      calculable: true,
-      orient: "horizontal",
+    series: [
+      {
+        name: "活跃次数",
+        type: "bar",
+        barMaxWidth: 22,
+        data: counts.map((v, i) => ({
+          value: v,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: i === peakIdx ? "#1d4ed8" : "#60a5fa" },
+              { offset: 1, color: i === peakIdx ? "#2563eb" : "#93c5fd" },
+            ]),
+            borderRadius: [4, 4, 0, 0],
+          },
+          emphasis: { itemStyle: { shadowBlur: 10, shadowColor: "rgba(37,99,235,0.25)" } },
+        })),
+      },
+    ],
+  }, true);
+}
+
+function buildHourlyRose(periodData) {
+  const total = periodData.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const colors = ["#2563eb", "#06b6d4", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+  heatmapChart.setOption({
+    backgroundColor: "transparent",
+    animation: true,
+    animationDuration: 1200,
+    animationEasing: "cubicOut",
+    title: {
+      text: "活跃时段结构占比",
+      left: 8,
+      top: 0,
+      textStyle: { color: "#0f172a", fontSize: 14, fontWeight: 800 },
+    },
+    tooltip: {
+      trigger: "item",
+      backgroundColor: "rgba(15,23,42,0.92)",
+      borderColor: "rgba(148,163,184,0.25)",
+      borderWidth: 1,
+      padding: 0,
+      textStyle: { color: "#e8f0ff" },
+      extraCssText: "border-radius:16px;box-shadow:0 16px 48px rgba(15,23,42,0.4);backdrop-filter:blur(12px);overflow:hidden;",
+      formatter(params) {
+        const value = Number(params.value || 0);
+        const percent = total > 0 ? ((value / total) * 100).toFixed(1) : "0.0";
+        return (
+          `<div style="min-width:180px;padding:14px 16px;">` +
+          `<div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:12px;">${params.name}</div>` +
+          `<div style="display:flex;justify-content:space-between;gap:18px;margin-bottom:8px;font-size:12px;color:#94a3b8;">` +
+          `<span>活跃次数</span><strong style="color:#fff;font-size:17px;">${formatNumber(value)}</strong>` +
+          `</div>` +
+          `<div style="display:flex;justify-content:space-between;gap:18px;font-size:12px;color:#94a3b8;">` +
+          `<span>占比</span><strong style="color:#38bdf8;font-size:17px;">${percent}%</strong>` +
+          `</div>` +
+          `</div>`
+        );
+      },
+    },
+    legend: {
+      bottom: 0,
       left: "center",
-      bottom: 4,
-      itemHeight: 120,
-      text: ["高", "低"],
+      itemWidth: 10,
+      itemHeight: 10,
       textStyle: { color: "#64748b", fontSize: 11 },
-      // 0 值用近白色，有数据时从浅蓝到深蓝
-      inRange: { color: ["#f0f9ff", "#bae6fd", "#7dd3fc", "#38bdf8", "#0ea5e9", "#0369a1"] },
     },
-    series: [{
-      name: "热搜数量",
-      type: "heatmap",
-      data: seriesData,
-      label: { show: false },
-      emphasis: { itemStyle: { shadowBlur: 8, shadowColor: "rgba(0,0,0,0.15)" } },
-      itemStyle: { borderColor: "#fff", borderWidth: 0.5 },
-    }],
+    graphic: total > 0 ? [] : [
+      {
+        type: "text",
+        left: "center",
+        top: "middle",
+        silent: true,
+        style: {
+          text: "暂无活跃数据",
+          fill: "#94a3b8",
+          fontSize: 14,
+          fontWeight: 700,
+          textAlign: "center",
+        },
+      },
+    ],
+    series: [
+      {
+        name: "活跃时段结构占比",
+        type: "pie",
+        roseType: "area",
+        radius: ["20%", "72%"],
+        center: ["50%", "48%"],
+        avoidLabelOverlap: true,
+        stillShowZeroSum: false,
+        label: {
+          show: true,
+          color: "#334155",
+          fontSize: 11,
+          fontWeight: 700,
+          formatter(params) {
+            const value = Number(params.value || 0);
+            const percent = total > 0 ? ((value / total) * 100).toFixed(1) : "0.0";
+            return `${params.name}\n${percent}%`;
+          },
+        },
+        labelLine: {
+          show: true,
+          length: 12,
+          length2: 8,
+          lineStyle: { color: "rgba(100,116,139,0.45)" },
+        },
+        itemStyle: {
+          borderColor: "#fff",
+          borderWidth: 2,
+          shadowBlur: 10,
+          shadowColor: "rgba(15,23,42,0.08)",
+        },
+        emphasis: {
+          scale: true,
+          scaleSize: 8,
+          itemStyle: { shadowBlur: 18, shadowColor: "rgba(15,23,42,0.18)" },
+        },
+        data: periodData.map((item, index) => ({
+          name: item.name,
+          value: item.value,
+          itemStyle: { color: colors[index % colors.length] },
+        })),
+      },
+    ],
+  }, true);
+}
+
+function buildHourlyRadar(labels, counts, avgHots, maxCount, maxAvgHot) {
+  // ── 填充扇形玫瑰图（南丁格尔玫瑰图）───────────────────────────
+  // 核心理念：扇形面积 ∝ 热度强度（avgHots），颜色冷暖 ∝ 热搜密度（counts）
+  const peakIdx = counts.indexOf(Math.max(...counts));
+  const avgCount = Math.round(counts.reduce((a, b) => a + b, 0) / 24);
+  const avgHot = Math.round(avgHots.filter(v => v > 0).reduce((a, b) => a + b, 0) / Math.max(1, avgHots.filter(v => v > 0).length));
+
+  // 颜色函数：热搜密度映射（冷蓝→暖红）
+  function sectorColor(value, maxVal) {
+    const ratio = maxVal > 0 ? value / maxVal : 0;
+    const stops = [
+      { r: 96, g: 165, b: 250 },   // #60a5fa 冷蓝（低密度）
+      { r: 37, g: 99, b: 235 },   // #2563eb 蓝
+      { r: 139, g: 92, b: 246 },  // #8b5cf6 紫
+      { r: 239, g: 68, b: 68 },   // #ef4444 红（高密度）
+    ];
+    const segs = [
+      { min: 0, max: 0.33, c1: stops[0], c2: stops[1] },
+      { min: 0.33, max: 0.66, c1: stops[1], c2: stops[2] },
+      { min: 0.66, max: 1.0, c1: stops[2], c2: stops[3] },
+    ];
+    let c1 = stops[0], c2 = stops[1];
+    for (const s of segs) { if (ratio >= s.min && ratio <= s.max) { c1 = s.c1; c2 = s.c2; break; } }
+    const t = (ratio - 0) / (0.33 || 1);
+    const r = Math.round(c1.r + (c2.r - c1.r) * Math.min(1, Math.max(0, t)));
+    const g = Math.round(c1.g + (c2.g - c1.g) * Math.min(1, Math.max(0, t)));
+    const b = Math.round(c1.b + (c2.b - c1.b) * Math.min(1, Math.max(0, t)));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // 半径归一化（avgHots → 0%~90%）
+  const radiusScale = (v) => maxAvgHot > 0 ? Math.round((v / maxAvgHot) * 90) + "%" : "5%";
+  const avgRadius = radiusScale(avgHot);
+
+  // 扇形角度：24等分，顶部起逆时针
+  const slotAngle = (2 * Math.PI) / 24;
+  const gap = 0.015; // 扇形间隙（弧度）
+
+  // 构建 24 个扇形数据
+  const sectors = labels.map((_, i) => {
+    const isPeak = i === peakIdx;
+    const startAngle = -Math.PI / 2 + i * slotAngle + gap;
+    const endAngle = -Math.PI / 2 + (i + 1) * slotAngle - gap;
+    const color = sectorColor(counts[i], maxCount);
+    const alpha = isPeak ? 0.92 : 0.78;
+    const innerRadius = isPeak ? "8%" : "6%"; // 峰值为圆环，其余实心
+    const outerRadius = isPeak
+      ? `min(${radiusScale(avgHots[i])}, 90%)`
+      : radiusScale(avgHots[i]);
+
+    return {
+      value: avgHots[i],
+      count: counts[i],
+      isPeak,
+      startAngle,
+      endAngle,
+      innerRadius,
+      outerRadius,
+      color,
+      alpha,
+      label: labels[i],
+    };
   });
+
+  heatmapChart.setOption({
+    backgroundColor: "transparent",
+    animation: true,
+    animationDuration: 1800,
+    animationEasing: "elasticOut",
+
+    // ── 极坐标系统 ─────────────────────────────────────────────
+    polar: { center: ["50%", "52%"], radius: "75%" },
+
+    // ── Tooltip ──────────────────────────────────────────────────
+    tooltip: {
+      trigger: "item",
+      backgroundColor: "rgba(15,23,42,0.92)",
+      borderColor: "rgba(148,163,184,0.25)",
+      borderWidth: 1,
+      padding: 0,
+      textStyle: { color: "#e8f0ff" },
+      extraCssText: "border-radius:16px;box-shadow:0 16px 48px rgba(15,23,42,0.4);backdrop-filter:blur(12px);overflow:hidden;",
+      formatter(p) {
+        if (p.seriesType !== "custom") return "";
+        const s = sectors[p.dataIndex];
+        if (!s) return "";
+        const pct = maxCount > 0 ? (s.count / maxCount * 100).toFixed(0) : 0;
+        const hotPct = maxAvgHot > 0 ? (s.value / maxAvgHot * 100).toFixed(0) : 0;
+        const density = s.count > avgCount ? "🔥 高密度" : "📉 低于均值";
+        return (
+          `<div style="min-width:210px;padding:16px 18px;">` +
+          `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">` +
+          `<span style="font-size:14px;font-weight:700;color:#fff;">${s.label}</span>` +
+          (s.isPeak ? `<span style="background:rgba(239,68,68,0.2);color:#f87171;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;border:1px solid rgba(239,68,68,0.3);">★ 峰值</span>` : "") +
+          `</div>` +
+          `<div style="margin-bottom:10px;">` +
+          `<div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-bottom:4px;"><span>热搜密度（占比）</span><span>${pct}%</span></div>` +
+          `<div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">` +
+          `<div style="height:100%;width:${pct}%;background:${sectorColor(s.count, maxCount)};border-radius:3px;box-shadow:0 0 6px ${sectorColor(s.count, maxCount)}66;"></div>` +
+          `</div>` +
+          `</div>` +
+          `<div style="margin-bottom:12px;">` +
+          `<div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-bottom:4px;"><span>热度强度（半径）</span><span>${hotPct}%</span></div>` +
+          `<div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">` +
+          `<div style="height:100%;width:${hotPct}%;background:linear-gradient(90deg,#06b6d4,#22c55e);border-radius:3px;box-shadow:0 0 6px rgba(6,182,212,0.4);"></div>` +
+          `</div>` +
+          `</div>` +
+          `<div style="display:flex;justify-content:space-between;gap:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:#94a3b8;">` +
+          `<span>热搜条数 <strong style="color:#fff;font-size:16px;">${s.count}</strong></span>` +
+          `<span>平均热度 <strong style="color:#22c55e;font-size:16px;">${formatNumber(s.value)}</strong></span>` +
+          `</div>` +
+          `</div>`
+        );
+      },
+    },
+
+    // ── 角度轴（24 小时标签）────────────────────────────────────
+    angleAxis: {
+      type: "category",
+      data: labels,
+      startAngle: 90,
+      clockwise: false,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: {
+        color: (val, i) => [0, 6, 12, 18].includes(i) ? "#1e293b" : "transparent",
+        fontSize: 9,
+        fontWeight: 700,
+        margin: 6,
+        formatter(v) {
+          const h = parseInt(v);
+          if (h === 0) return "00";
+          if (h === 6) return "06";
+          if (h === 12) return "12";
+          if (h === 18) return "18";
+          return "";
+        },
+      },
+      splitLine: { show: false },
+    },
+
+    // ── 径向轴（控制圆环半径）────────────────────────────────────
+    radiusAxis: {
+      type: "value",
+      min: 0,
+      max: 100,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { show: false },
+      splitLine: {
+        lineStyle: {
+          color: "rgba(148,163,184,0.1)",
+          type: "dashed",
+          width: 1,
+        },
+      },
+      splitArea: {
+        areaStyle: {
+          color: [
+            "rgba(241,245,249,0.06)",
+            "rgba(241,245,249,0.03)",
+            "rgba(241,245,249,0)",
+          ],
+        },
+      },
+    },
+
+    // ── 均值参考圆环（静态）──────────────────────────────────────
+    graphic: [
+      {
+        type: "ring",
+        shape: { cx: 0, cy: 0, r: parseFloat(avgRadius), r2: parseFloat(avgRadius) + 3 },
+        style: {
+          fill: "transparent",
+          stroke: "rgba(148,163,184,0.3)",
+          lineWidth: 1.5,
+          lineDash: [4, 3],
+        },
+        left: "center",
+        top: "center",
+        silent: true,
+      },
+    ],
+
+    // ── 三系列：填充扇形 + 热度曲线 + 均值参考环 ───────────────────
+    series: [
+      // ── 核心：填充扇形（自定义渲染）────────────────────────────
+      {
+        name: "热搜密度与热度",
+        type: "custom",
+        coordinateSystem: "polar",
+        renderItem(params, api) {
+          const idx = params.dataIndex;
+          const s = sectors[idx];
+          if (!s) return;
+          const cx = api.coord([0, 0])[0];
+          const cy = api.coord([0, 0])[1];
+          // 把百分比的内外半径转换为像素
+          const polar = heatmapChart.getModel().option.polar[0];
+          const chartRadius = Math.min(
+            (api.coord([0, 100]))[1] - cy,
+            api.coord([0, 100])[0] - cx
+          );
+          const toPx = (pct) => (parseFloat(pct) / 100) * chartRadius;
+          const innerR = toPx(s.innerRadius);
+          const outerR = toPx(s.outerRadius);
+          const startAngle = s.startAngle;
+          const endAngle = s.endAngle;
+          // 扇形路径
+          const arc = (r, sa, ea) => {
+            const x1 = cx + r * Math.cos(sa), y1 = cy + r * Math.sin(sa);
+            const x2 = cx + r * Math.cos(ea), y2 = cy + r * Math.sin(ea);
+            const large = ea - sa > Math.PI ? 1 : 0;
+            return `M${x1},${y1} A${r},${r},0,${large},1,${x2},${y2}`;
+          };
+          const pathStr = `${arc(outerR, startAngle, endAngle)}${arc(innerR, endAngle, startAngle)}Z`;
+          // 峰值：外发光效果
+          const glowFilter = s.isPeak
+            ? `drop-shadow(0 0 ${s.isPeak ? 12 : 4}px ${s.color}${s.isPeak ? "aa" : "44"})`
+            : "";
+          return {
+            type: "group",
+            children: [
+              {
+                type: "path",
+                shape: { pathData: pathStr },
+                style: {
+                  fill: s.color,
+                  opacity: s.alpha,
+                  stroke: s.isPeak ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.25)",
+                  lineWidth: s.isPeak ? 2 : 0.8,
+                  shadowBlur: s.isPeak ? 16 : 0,
+                  shadowColor: `${s.color}80`,
+                },
+              },
+            ],
+          };
+        },
+        data: sectors.map((s) => s.value),
+        z: 2,
+        encode: { tooltip: [0] },
+      },
+      // ── 热度强度曲线（叠加在扇形上方）─────────────────────────
+      {
+        name: "热度强度",
+        type: "line",
+        coordinateSystem: "polar",
+        symbol: "circle",
+        symbolSize: 5,
+        showSymbol: false,
+        smooth: 0.4,
+        lineStyle: {
+          color: "#22c55e",
+          width: 2.5,
+          opacity: 0.9,
+          shadowBlur: 8,
+          shadowColor: "rgba(34,197,94,0.5)",
+        },
+        itemStyle: { color: "#22c55e", borderColor: "#fff", borderWidth: 2 },
+        emphasis: {
+          showSymbol: true,
+          symbolSize: 8,
+          lineStyle: { width: 3 },
+          itemStyle: { shadowBlur: 14, shadowColor: "rgba(34,197,94,0.6)" },
+        },
+        data: sectors.map((s) => Math.round((s.value / maxAvgHot) * 100)),
+        z: 3,
+      },
+      // ── 均值参考弧线（虚线圆）────────────────────────────────
+      {
+        name: "均值参考",
+        type: "line",
+        coordinateSystem: "polar",
+        symbol: "none",
+        smooth: false,
+        lineStyle: {
+          color: "rgba(148,163,184,0.3)",
+          width: 1.5,
+          type: "dashed",
+        },
+        data: sectors.map(() => Math.round((avgHot / maxAvgHot) * 100)),
+        z: 1,
+      },
+    ],
+  }, true);
+}
+
+function switchHourlyView(view) {
+  hourlyView.value = view;
+  buildHeatmap();
 }
 
 async function loadSummaryData() {
@@ -502,7 +1355,7 @@ async function loadSummaryData() {
 async function loadRankingData() {
   const response = await getCurrentRanking();
   rankingList.value = response.items || [];
-  if (!keyword.value && rankingList.value.length) keyword.value = rankingList.value[0].title;
+  // 不再自动把 keyword 设置为榜单第一词，保持全库默认视图
 }
 
 async function loadHeatmap() {
@@ -511,17 +1364,23 @@ async function loadHeatmap() {
     const res = await getHourlyHeatmap();
     heatmapData.value = res.items || [];
   } catch (e) {
+    console.warn("[heatmap] 热力图数据接口加载失败", e);
     heatmapData.value = [];
   } finally {
     // 必须先把 loading 置为 false，Vue 才会渲染 v-else 分支并挂载 heatmapRef
     heatmapLoading.value = false;
   }
   // loading=false 之后等两轮 nextTick，让 v-else 分支的 DOM 完成挂载再 init ECharts
-  if (heatmapData.value.length) {
-    await nextTick();
-    await nextTick();
-    buildHeatmap();
+  if (!heatmapData.value.length) {
+    if (heatmapChart) {
+      heatmapChart.dispose();
+      heatmapChart = null;
+    }
+    return;
   }
+  await nextTick();
+  await nextTick();
+  buildHeatmap();
 }
 
 async function loadMovers() {
@@ -569,12 +1428,20 @@ async function handleCollectNow() {
 async function queryTrend(targetKeyword = keyword.value) {
   const cleanedKeyword = String(targetKeyword || "").trim();
   keyword.value = cleanedKeyword;
-  if (!cleanedKeyword) { trendPoints.value = []; trendMessage.value = "请输入关键词后再查询。"; buildChart(); return; }
   loadingTrend.value = true;
   try {
+    // 关键词为空时拉取全库每日最高热度；有关键词时按关键词过滤
     const response = await getTrend(cleanedKeyword);
     trendPoints.value = response.points || [];
-    trendMessage.value = trendPoints.value.length ? `当前关键词：${response.keyword}，共 ${trendPoints.value.length} 条数据` : `暂无"${response.keyword}"的趋势数据，请更换关键词或先采集更多数据。`;
+    if (!trendPoints.value.length) {
+      trendMessage.value = cleanedKeyword
+        ? `暂无「${response.keyword}」的趋势数据，请更换关键词或先采集更多数据。`
+        : "数据库暂无数据，请先运行采集器。";
+    } else {
+      trendMessage.value = cleanedKeyword
+        ? `「${response.keyword}」共覆盖 ${trendPoints.value.length} 天，每柱为当日最高热度`
+        : `全库数据共覆盖 ${trendPoints.value.length} 天，每柱为当日所有热搜最高热度`;
+    }
     buildChart();
   } catch (error) {
     trendPoints.value = []; trendMessage.value = error.message || "查询失败，请检查后端服务是否启动"; buildChart();
@@ -591,8 +1458,8 @@ function handleResize() {
 onMounted(async () => {
   await loadPageData();
   await nextTick();
-  buildChart();
-  if (keyword.value) await queryTrend(keyword.value);
+  // 页面加载时自动展示全库每日最高热度（不需要关键词）
+  await queryTrend("");
   window.addEventListener("resize", handleResize);
   // 页面加载完成后启动自动轮询
   startAutoRefresh();
@@ -680,6 +1547,14 @@ p { margin: 0; color: var(--text-muted); font-size: 14px; }
 .search-box button { padding: 11px 20px; border: none; border-radius: var(--radius-btn); background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 4px 14px rgba(37,99,235,0.3); }
 .search-box button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(37,99,235,0.35); }
 .search-box button:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+.clear-btn { padding: 11px 14px !important; background: rgba(148,163,184,0.18) !important; color: var(--text-muted) !important; box-shadow: none !important; font-size: 13px !important; }
+.clear-btn:hover:not(:disabled) { background: rgba(239,68,68,0.12) !important; color: var(--danger) !important; transform: none !important; box-shadow: none !important; }
+
+/* 视图切换按钮 */
+.view-toggle { display: flex; gap: 6px; background: rgba(241,245,249,0.8); border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 3px; flex-shrink: 0; }
+.toggle-btn { padding: 7px 16px; border: none; border-radius: 7px; background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
+.toggle-btn.active { background: #fff; color: var(--primary); box-shadow: 0 2px 8px rgba(37,99,235,0.18); }
+.toggle-btn:hover:not(.active) { color: var(--text-base); background: rgba(255,255,255,0.6); }
 
 /* 图表 */
 .chart-wrap { min-height: 360px; }
@@ -723,14 +1598,18 @@ p { margin: 0; color: var(--text-muted); font-size: 14px; }
 .empty-icon { width: 48px; height: 48px; color: var(--text-light); }
 
 /* 数据明细表 */
-.table-wrap { width: 100%; overflow-x: auto; }
-.trend-table { width: 100%; border-collapse: collapse; }
-.trend-table th, .trend-table td { padding: 11px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 14px; }
-.trend-table th { color: #475569; font-weight: 700; background: rgba(241,245,249,0.8); font-size: 13px; }
-.trend-table tbody tr:hover { background: rgba(239,246,255,0.7); }
-.hot-cell { color: var(--primary); font-weight: 600; }
-.rank-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; padding: 2px 8px; border-radius: 6px; background: rgba(15,23,42,0.06); color: var(--navy); font-size: 12px; font-weight: 600; }
-.table-empty { text-align: center; color: var(--text-light); padding: 32px; }
+.table-wrap { width: 100%; overflow-x: auto; border: 1px solid rgba(203,213,225,0.8); border-radius: 16px; background: rgba(255,255,255,0.92); box-shadow: 0 14px 34px rgba(15,23,42,0.07); -webkit-overflow-scrolling: touch; }
+.data-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 620px; }
+.data-table th, .data-table td { padding: 13px 16px; border-bottom: 1px solid rgba(226,232,240,0.9); text-align: left; font-size: 14px; vertical-align: middle; }
+.data-table thead th { position: sticky; top: 0; z-index: 2; color: #334155; font-weight: 800; background: linear-gradient(180deg, rgba(248,250,252,0.98), rgba(241,245,249,0.96)); font-size: 13px; white-space: nowrap; box-shadow: inset 0 -1px 0 rgba(203,213,225,0.9); }
+.data-table tbody tr { transition: background 0.18s ease, box-shadow 0.18s ease; }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: rgba(239,246,255,0.78); }
+.data-table tbody td:first-child { position: relative; }
+.data-table tbody tr:hover td:first-child::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 999px; background: #2563eb; }
+.hot-cell { color: #1d4ed8; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+.rank-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; min-height: 24px; padding: 3px 11px; border-radius: 999px; background: rgba(37,99,235,0.1); color: #1d4ed8; border: 1px solid rgba(37,99,235,0.22); font-size: 12px; font-weight: 800; line-height: 1; }
+.table-empty { text-align: center; color: #94a3b8; padding: 34px 18px; background: linear-gradient(180deg, rgba(248,250,252,0.72), rgba(255,255,255,0.86)); font-weight: 600; }
 
 /* 响应式 */
 @media (max-width: 1100px) {
